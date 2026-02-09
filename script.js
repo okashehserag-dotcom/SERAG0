@@ -184,16 +184,11 @@ async function googleLogin(){
   if(!location.hash) location.hash = "#timer";
   render();
 }
-
 async function logout(){
-  if(!FB) return;
-  try{
-    const { fb, auth } = FB;
-    await fb.signOut(auth);
-  }catch(e){
-    console.error(e);
-    toast("تعذر تسجيل الخروج", "bad");
-  }
+  // Local mode: just reset session UI (keep data)
+  document.querySelector("#authScreen").classList.remove("hidden");
+  document.querySelector("#mainScreen").classList.add("hidden");
+  location.hash = "";
 }
 
 async function ensureUserDoc(user){
