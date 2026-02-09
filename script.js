@@ -202,30 +202,12 @@ async function logout(){
   if(m) m.classList.add("hidden");
   location.hash = "";
 }
-
 async function ensureUserDoc(user){ /* local only */ }
 async function pullUserDoc(user){ /* local only */ }
 
 function syncUserThrottled(){ /* local only */ }
 async function pushUserDoc(){ /* local only */ }
 
-    const { fb, db } = FB;
-    const ref = fb.doc(db, "users", authedUser.uid);
-    await fb.updateDoc(ref, {
-      displayName: state.user.displayName || authedUser.displayName || "سراج",
-      photoURL: state.user.photoURL || authedUser.photoURL || "",
-      coins: state.coins,
-      totalMinutes: state.totalMinutes,
-      equipped: state.equipped,
-      inventory: state.inventory,
-      avatar: state.avatar,
-      updatedAt: fb.serverTimestamp()
-    });
-  }catch(e){
-    console.error(e);
-
-  }
-}
 /* ---------------------------
   App shell paint
 ---------------------------- */
