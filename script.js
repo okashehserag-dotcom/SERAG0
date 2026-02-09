@@ -1788,14 +1788,28 @@ function escapeHtml(str){
 (async function boot(){
   dailyResetIfNeeded();
 
-  document.querySelector("#btnGoogle").onclick = googleLogin;
-  document.querySelector("#btnLogout").onclick = logout;
+  // اسم افتراضي محلي
+  state.user.uid = "local";
+  state.user.displayName = state.user.displayName || "طالب سراج";
+  state.user.photoURL = "";
+
+  // زر logout يصير "إعادة ضبط التطبيق" (اختياري)
+  const btnLogout = document.querySelector("#btnLogout");
+  if(btnLogout){
+    btnLogout.textContent = "إعادة ضبط";
+    btnLogout.onclick = ()=>{
+      if(confirm("بدك تمسح بيانات سراج على هذا الجهاز؟")){
+        localStorage.removeItem("seraj_state_v1");
+        location.reload();
+      }
+    };
+  }
 
   paintShell();
 
-  // ابدأ على شاشة "تسجيل دخول" محلية (زر واحد)
-  document.querySelector("#authScreen").classList.remove("hidden");
-  document.querySelector("#mainScreen").classList.add("hidden");
+  // افتح مباشرة على التايمر
+  if(!location.hash) location.hash = "#timer";
+  render();
 
   window.addEventListener("hashchange", render);
 })();
