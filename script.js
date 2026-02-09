@@ -1785,60 +1785,17 @@ function escapeHtml(str){
     .replaceAll("'","&#039;");
 }
 
-/* =========================================================
-  Boot
-========================================================= */
 (async function boot(){
   dailyResetIfNeeded();
 
-  // UI hooks
-  $("#btnGoogle").onclick = googleLogin;
-  $("#btnLogout").onclick = logout;
+  document.querySelector("#btnGoogle").onclick = googleLogin;
+  document.querySelector("#btnLogout").onclick = logout;
 
-  await initFirebase();
+  paintShell();
 
-  if(FB){
-    const { fb, auth } = FB;
-    fb.onAuthStateChanged(auth, async (user)=>{
-      authedUser = user || null;
-
-      if(!user){
-        // show auth
-        $("#authScreen").classList.remove("hidden");
-        $("#mainScreen").classList.add("hidden");
-        stopLeaderboard();
-        return;
-      }
-
-      // store user
-      state.user.uid = user.uid;
-      state.user.displayName = user.displayName || state.user.displayName || "طالب سراج";
-      state.user.photoURL = user.photoURL || "";
-
-      $("#authScreen").classList.add("hidden");
-      $("#mainScreen").classList.remove("hidden");
-
-      try{
-        await ensureUserDoc(user);
-        await pullUserDoc(user);
-      }catch(e){
-        console.error(e);
-      }
-
-      saveState();
-      paintShell();
-
-      // default route after login
-      if(!location.hash) location.hash = "#timer";
-      render();
-    });
-  }else{
-    toast("Firebase غير جاهز — شغّل محليًا أو على Pages مع config صحيح", "bad");
-  }
+  // ابدأ على شاشة "تسجيل دخول" محلية (زر واحد)
+  document.querySelector("#authScreen").classList.remove("hidden");
+  document.querySelector("#mainScreen").classList.add("hidden");
 
   window.addEventListener("hashchange", render);
-
-  // If already logged in, render will happen in auth callback.
-  // If not, show auth screen.
-  paintShell();
 })();
