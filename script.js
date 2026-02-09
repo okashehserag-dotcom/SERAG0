@@ -1,55 +1,89 @@
 /* =========================================================
-  Seraj — Local-only (GitHub Pages Static)
-  - No Firebase
-  - Opens مباشرة بدون تسجيل دخول
-  - Routing عبر #hash
-  - Timer 3D Three.js + Coins
-  - Daily Goals lock + Plan heuristic
+  SERAJ0 — Local-only script.js (NO Firebase)
+  - No login, opens مباشرة
+  - Hash routing
+  - Daily Goals lock
+  - Timer earns 1 coin per full minute
+  - Store + Inventory + Equip
+  - Stats + Notebooks + Plan + Settings + Profile
+  - Safe JS: no structuredClone / no crypto.randomUUID
 ========================================================= */
 
 /* ---------------------------
-  State (localStorage)
+  Safe helpers
 ---------------------------- */
+const $ = (q, el=document) => el.querySelector(q);
+const $$ = (q, el=document) => Array.from(el.querySelectorAll(q));
 const LS_KEY = "seraj_state_v1";
+const nowISO = ()=> new Date().toISOString();
+const clamp = (n,a,b)=> Math.max(a, Math.min(b,n));
 
+function deepCopy(obj){
+  return JSON.parse(JSON.stringify(obj));
+}
+function escapeHtml(s){
+  return String(s||"")
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;").replace(/"/g,"&quot;")
+    .replace(/'/g,"&#039;");
+}
+function uuid(){
+  // Simple unique id (safe in any browser)
+  return "id_" + Math.random().toString(16).slice(2) + "_" + Date.now().toString(16);
+}
+function todayKey(){
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,"0");
+  const da = String(d.getDate()).padStart(2,"0");
+  return `${y}-${m}-${da}`;
+}
+function toast(msg, type="info"){
+  const t = document.createElement("div");
+  t.textContent = msg;
+  t.style.cssText = `
+    position:fixed; left:12px; right:12px; bottom:12px;
+    padding:12px 14px; border-radius:16px;
+    border:1px solid rgba(255,255,255,.14);
+    background:rgba(0,0,0,.55); color:#fff;
+    z-index:9999; font-weight:800; backdrop-filter:blur(8px);
+  `;
+  if(type==="bad") t.style.borderColor="rgba(255,107,107,.6)";
+  if(type==="good") t.style.borderColor="rgba(54,211,153,.6)";
+  document.body.appendChild(t);
+  setTimeout(()=>t.remove(), 2200);
+}
+
+/* ---------------------------
+  Default state
+---------------------------- */
 const DEFAULT_STATE = {
   version: 1,
-  user: { uid: "local", displayName: "طالب سراج", photoURL: "" },
+  user: { uid:"local", displayName:"طالب سراج", photoURL:"" },
 
   coins: 0,
   totalMinutes: 0,
   history: [], // {ts, delta, reason}
 
-  equipped: {
-    timerSkin: "skin_basic",
-    bgTheme: "bg_basic"
-  },
-
-  inventory: {
-    skin_basic: true,
-    bg_basic: true
-  },
+  inventory: { skin_basic:true, bg_basic:true },
+  equipped: { timerSkin:"skin_basic", bgTheme:"bg_basic" },
 
   daily: {
-    date: "",        // YYYY-MM-DD
+    date: "",
     locked: true,
-    goals: null,     // { totalMinutes, startTime, subjects:[{name,pct}] }
-    plan: [],        // generated sessions [{subject, minutes}]
-    sessionsToday: []// per minute earned today
+    goals: null,   // {totalMinutes, startTime, subjects:[{name,pct}]}
+    plan: [],
+    sessionsToday: []
   },
 
-  sessions: [], // global minutes log: {tsISO, minutes:1, skin}
+  sessions: [], // global per-minute logs: {tsISO, minutes:1, skin}
 
-  notebooks: {
-    strengths: [],
-    weaknesses: [],
-    lessonNotes: []
-  },
+  notebooks: { strengths:[], weaknesses:[], lessonNotes:[] },
 
   longPlan: {
     rangeDays: 30,
     hero: "سوي خطتك بنفسك — هذا طريقك الخاص",
-    days: [] // [{date, items:[{subject, task, done, id}]}]
+    days: [] // [{date, items:[{id, subject, task, done}]}]
   },
 
   avatar: {
@@ -57,91 +91,39 @@ const DEFAULT_STATE = {
     svg: ""
   },
 
-  settings: {
-    sound: true
-  },
+  settings: { sound:true },
 
-  timer: {
-    running: false,
-    carrySeconds: 0,
-    lastTick: 0
-  }
+  timer: { running:false, carrySeconds:0, lastTick:0 }
 };
 
 let state = loadState();
 
 /* ---------------------------
-  Helpers
+  Storage
 ---------------------------- */
-const $ = (q, el=document) => el.querySelector(q);
-const $$ = (q, el=document) => [...el.querySelectorAll(q)];
-const nowISO = () => new Date().toISOString();
-function clamp(n,a,b){ return Math.max(a, Math.min(b,n)); }
-
-function todayKey(){
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth()+1).padStart(2,'0');
-  const da = String(d.getDate()).padStart(2,'0');
-  return `${y}-${m}-${da}`;
-}
-
 function deepMerge(base, extra){
   for(const k in extra){
-    if(extra[k] && typeof extra[k] === "object" && !Array.isArray(extra[k])){
-      base[k] = deepMerge(base[k] || {}, extra[k]);
+    const v = extra[k];
+    if(v && typeof v === "object" && !Array.isArray(v)){
+      base[k] = deepMerge(base[k] || {}, v);
     }else{
-      base[k] = extra[k];
+      base[k] = v;
     }
   }
   return base;
 }
-
 function loadState(){
   try{
     const raw = localStorage.getItem(LS_KEY);
-    if(!raw) return structuredClone(DEFAULT_STATE);
-    const parsed = JSON.parse(raw);
-    return deepMerge(structuredClone(DEFAULT_STATE), parsed);
+    if(!raw) return deepCopy(DEFAULT_STATE);
+    return deepMerge(deepCopy(DEFAULT_STATE), JSON.parse(raw));
   }catch{
-    return structuredClone(DEFAULT_STATE);
+    return deepCopy(DEFAULT_STATE);
   }
 }
-
 function saveState(){
-  localStorage.setItem(LS_KEY, JSON.stringify(state));
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }catch{}
   paintShell();
-}
-
-function escapeHtml(str){
-  return String(str||"")
-    .replaceAll("&","&amp;")
-    .replaceAll("<","&lt;")
-    .replaceAll(">","&gt;")
-    .replaceAll('"',"&quot;")
-    .replaceAll("'","&#039;");
-}
-
-function toast(msg, type="info"){
-  const t = document.createElement("div");
-  t.textContent = msg;
-  Object.assign(t.style, {
-    position:"fixed", inset:"auto 14px 14px 14px",
-    padding:"12px 14px", borderRadius:"16px",
-    border:"1px solid rgba(255,255,255,.14)",
-    background:"rgba(0,0,0,.55)", color:"#fff",
-    zIndex:9999, fontWeight:800, backdropFilter:"blur(8px)"
-  });
-  if(type==="bad") t.style.borderColor="rgba(255,107,107,.6)";
-  if(type==="good") t.style.borderColor="rgba(54,211,153,.6)";
-  document.body.appendChild(t);
-  setTimeout(()=> t.remove(), 2200);
-}
-
-function fmtTime(sec){
-  const m = Math.floor(sec/60);
-  const s = sec%60;
-  return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
 }
 
 /* ---------------------------
@@ -163,15 +145,22 @@ function dailyResetIfNeeded(){
 }
 
 /* ---------------------------
-  UI shell paint
+  Theme
 ---------------------------- */
-function setActiveNav(){
-  const hash = location.hash || "#timer";
-  $$("[data-route]").forEach(a=>{
-    a.classList.toggle("active", a.getAttribute("href")===hash);
-  });
+function setBackgroundTheme(){
+  const bg = state.equipped.bgTheme;
+  document.body.dataset.bg = bg;
+
+  const root = document.documentElement;
+  if(bg==="bg_fire") root.style.setProperty("--pri", "#ff7a66");
+  else if(bg==="bg_water") root.style.setProperty("--pri", "#6aa8ff");
+  else if(bg==="bg_jordan") root.style.setProperty("--pri", "#36d399");
+  else root.style.setProperty("--pri", "#6aa8ff");
 }
 
+/* ---------------------------
+  Shell UI
+---------------------------- */
 function paintShell(){
   const coin = $("#coinBadge");
   if(coin) coin.textContent = `${state.coins} SC`;
@@ -179,66 +168,52 @@ function paintShell(){
   const total = $("#totalMinPill");
   if(total) total.textContent = `${state.totalMinutes}`;
 
-  const locked = state.daily.locked;
   const pill = $("#dailyLockPill");
   if(pill){
+    const locked = state.daily.locked;
     pill.textContent = locked ? "🔒 لازم تدخل أهداف اليوم" : "✅ أهداف اليوم جاهزة";
     pill.style.borderColor = locked ? "rgba(255,204,102,.55)" : "rgba(54,211,153,.55)";
   }
+
+  const userName = $("#userName");
+  if(userName) userName.textContent = state.user.displayName || "طالب سراج";
 
   const miniAvatar = $("#miniAvatar");
   if(miniAvatar){
     miniAvatar.innerHTML = state.avatar.svg ? state.avatar.svg : `<span class="small">🙂</span>`;
   }
-
-  const userName = $("#userName");
-  if(userName) userName.textContent = state.user.displayName || "طالب سراج";
 }
-
-function setBackgroundTheme(){
-  const bg = state.equipped.bgTheme;
-  document.body.dataset.bg = bg;
-
-  const root = document.documentElement;
-  if(bg==="bg_fire"){
-    root.style.setProperty("--pri", "#ff7a66");
-  }else if(bg==="bg_water"){
-    root.style.setProperty("--pri", "#6aa8ff");
-  }else if(bg==="bg_jordan"){
-    root.style.setProperty("--pri", "#36d399");
-  }else{
-    root.style.setProperty("--pri", "#6aa8ff");
-  }
+function setActiveNav(){
+  const hash = location.hash || "#timer";
+  $$("[data-route]").forEach(a=>{
+    a.classList.toggle("active", a.getAttribute("href")===hash);
+  });
 }
 
 /* ---------------------------
   Router
 ---------------------------- */
 function routeGuard(hash){
-  const safe = new Set(["#goals", "#settings", "#profile", "#timer"]);
-  if(state.daily.locked && !safe.has(hash)){
-    return "#goals";
-  }
+  const safe = new Set(["#timer","#goals","#settings","#profile"]);
+  if(state.daily.locked && !safe.has(hash)) return "#goals";
   return hash;
 }
-
 function setTitle(hash){
   const map = {
-    "#timer":"⏱️ التايمر 3D",
+    "#timer":"⏱️ التايمر",
     "#goals":"✅ أهداف اليوم",
-    "#progress":"🪙 التقدم والعملات",
+    "#progress":"🪙 التقدم",
     "#store":"🛒 المتجر",
     "#stats":"📊 الإحصائيات",
     "#notebooks":"📒 الدفاتر",
     "#plan":"🗓️ خطة طويلة",
     "#leaderboard":"🏆 المتصدرين (محلي)",
     "#settings":"⚙️ الإعدادات",
-    "#profile":"🧑‍🎨 البروفايل/أفاتار"
+    "#profile":"🧑‍🎨 البروفايل"
   };
   const t = $("#pageTitle");
   if(t) t.textContent = map[hash] || "—";
 }
-
 function render(){
   dailyResetIfNeeded();
   setBackgroundTheme();
@@ -254,8 +229,6 @@ function render(){
   const view = $("#view");
   if(!view) return;
   view.innerHTML = "";
-
-  if(hash !== "#timer") destroyTimer3D();
 
   const page = ({
     "#timer": renderTimer,
@@ -274,210 +247,13 @@ function render(){
 }
 
 /* =========================================================
-  TIMER 3D (Three.js) — Ring + Glow + Sparks + Drag/Touch
+  Timer logic (earn 1 coin per minute)
 ========================================================= */
-let T = {
-  renderer:null, scene:null, camera:null,
-  ring:null, glow:null, sparks:null,
-  canvas:null,
-  raf:0,
-  dragging:false,
-  lastX:0,lastY:0,
-  rotY:0, rotX:0,
-  _ro:null
-};
-
-function skinDef(id){
-  const defs = {
-    skin_basic: { name:"Basic", base:0x6aa8ff, glow:0x6aa8ff },
-    skin_fire:  { name:"Fire",  base:0xff6b6b, glow:0xffcc66 },
-    skin_water: { name:"Water", base:0x6aa8ff, glow:0x36d399 },
-    skin_jordan:{ name:"Jordan",base:0xffffff, glow:0x36d399, jordan:true }
-  };
-  return defs[id] || defs.skin_basic;
-}
-
-function makeJordanTexture(){
-  const c = document.createElement("canvas");
-  c.width = 512; c.height = 64;
-  const g = c.getContext("2d");
-  g.fillStyle = "#000"; g.fillRect(0,0,512,22);
-  g.fillStyle = "#fff"; g.fillRect(0,22,512,20);
-  g.fillStyle = "#007a3d"; g.fillRect(0,42,512,22);
-  g.fillStyle = "#ce1126"; g.fillRect(0,0,120,64);
-  const tex = new THREE.CanvasTexture(c);
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.repeat.x = 2;
-  return tex;
-}
-
-function initTimer3D(container){
-  if(!window.THREE){
-    container.innerHTML = `<div style="padding:16px;color:var(--muted)">Three.js غير محمّل. تأكد إنك ضايفه في index.html</div>`;
-    return;
-  }
-
-  const canvas = document.createElement("canvas");
-  canvas.id = "timerCanvas";
-  container.appendChild(canvas);
-
-  const w = container.clientWidth;
-  const h = container.clientHeight;
-
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:true });
-  renderer.setSize(w,h,false);
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-
-  const scene = new THREE.Scene();
-
-  const camera = new THREE.PerspectiveCamera(45, w/h, 0.1, 100);
-  camera.position.set(0, 0.6, 3.2);
-
-  const amb = new THREE.AmbientLight(0xffffff, 0.75);
-  scene.add(amb);
-  const dir = new THREE.DirectionalLight(0xffffff, 0.9);
-  dir.position.set(2,2,3);
-  scene.add(dir);
-
-  const skin = skinDef(state.equipped.timerSkin);
-
-  const geo = new THREE.TorusGeometry(1, 0.18, 32, 160);
-  let mat;
-  if(skin.jordan){
-    const tex = makeJordanTexture();
-    mat = new THREE.MeshStandardMaterial({
-      map: tex,
-      metalness: 0.25,
-      roughness: 0.35,
-      emissive: new THREE.Color(0x222222),
-      emissiveIntensity: 0.35
-    });
-  }else{
-    mat = new THREE.MeshStandardMaterial({
-      color: skin.base,
-      metalness: 0.2,
-      roughness: 0.35,
-      emissive: new THREE.Color(skin.glow),
-      emissiveIntensity: 0.35
-    });
-  }
-
-  const ring = new THREE.Mesh(geo, mat);
-  ring.rotation.x = 0.7;
-  scene.add(ring);
-
-  const glowGeo = new THREE.TorusGeometry(1, 0.24, 16, 120);
-  const glowMat = new THREE.MeshBasicMaterial({
-    color: skin.glow,
-    transparent:true,
-    opacity: 0.18,
-    blending: THREE.AdditiveBlending,
-    depthWrite:false
-  });
-  const glow = new THREE.Mesh(glowGeo, glowMat);
-  glow.rotation.copy(ring.rotation);
-  scene.add(glow);
-
-  const sparkCount = 260;
-  const positions = new Float32Array(sparkCount*3);
-  for(let i=0;i<sparkCount;i++){
-    const a = Math.random()*Math.PI*2;
-    const r = 1 + (Math.random()*0.35);
-    positions[i*3+0] = Math.cos(a)*r;
-    positions[i*3+1] = (Math.random()-0.5)*0.6;
-    positions[i*3+2] = Math.sin(a)*r;
-  }
-  const sparkGeo = new THREE.BufferGeometry();
-  sparkGeo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-  const sparkMat = new THREE.PointsMaterial({
-    color: skin.glow,
-    size: 0.02,
-    transparent:true,
-    opacity: 0.85,
-    blending: THREE.AdditiveBlending,
-    depthWrite:false
-  });
-  const sparks = new THREE.Points(sparkGeo, sparkMat);
-  scene.add(sparks);
-
-  T.renderer = renderer;
-  T.scene = scene;
-  T.camera = camera;
-  T.ring = ring;
-  T.glow = glow;
-  T.sparks = sparks;
-  T.canvas = canvas;
-
-  const onDown = (x,y)=>{ T.dragging=true; T.lastX=x; T.lastY=y; };
-  const onMove = (x,y)=>{
-    if(!T.dragging) return;
-    const dx = (x - T.lastX);
-    const dy = (y - T.lastY);
-    T.lastX = x; T.lastY = y;
-    T.rotY += dx * 0.006;
-    T.rotX += dy * 0.004;
-    T.rotX = clamp(T.rotX, -0.7, 0.7);
-  };
-  const onUp = ()=>{ T.dragging=false; };
-
-  canvas.addEventListener("mousedown", e=>onDown(e.clientX, e.clientY));
-  window.addEventListener("mousemove", e=>onMove(e.clientX, e.clientY));
-  window.addEventListener("mouseup", onUp);
-
-  canvas.addEventListener("touchstart", e=>{
-    const t = e.touches[0];
-    onDown(t.clientX, t.clientY);
-  }, {passive:true});
-  canvas.addEventListener("touchmove", e=>{
-    const t = e.touches[0];
-    onMove(t.clientX, t.clientY);
-  }, {passive:true});
-  canvas.addEventListener("touchend", onUp, {passive:true});
-
-  const ro = new ResizeObserver(()=>{
-    if(!T.renderer) return;
-    const W = container.clientWidth;
-    const H = container.clientHeight;
-    T.renderer.setSize(W,H,false);
-    T.camera.aspect = W/H;
-    T.camera.updateProjectionMatrix();
-  });
-  ro.observe(container);
-  T._ro = ro;
-
-  const tick = (tms)=>{
-    const t = tms * 0.001;
-    ring.rotation.y = T.rotY + Math.sin(t*0.7)*0.15;
-    ring.rotation.x = 0.7 + T.rotX + Math.sin(t*0.9)*0.05;
-    glow.rotation.copy(ring.rotation);
-
-    sparks.rotation.y = -t*0.3;
-    sparks.rotation.x = Math.sin(t*0.2)*0.08;
-
-    const running = state.timer.running;
-    glow.material.opacity = running ? 0.22 + Math.sin(t*6)*0.03 : 0.16 + Math.sin(t*2)*0.02;
-
-    renderer.render(scene, camera);
-    T.raf = requestAnimationFrame(tick);
-  };
-  T.raf = requestAnimationFrame(tick);
-}
-
-function destroyTimer3D(){
-  if(!T.renderer) return;
-  cancelAnimationFrame(T.raf);
-  try{ T._ro?.disconnect(); }catch{}
-  try{ T.renderer.dispose(); }catch{}
-  T = { renderer:null, scene:null, camera:null, ring:null, glow:null, sparks:null, canvas:null, raf:0, dragging:false, lastX:0,lastY:0, rotY:0, rotX:0, _ro:null };
-}
-
-/* ---------------------------
-  Timer minute earning loop
----------------------------- */
 setInterval(()=>{
   if(!state.timer.running) return;
   const now = Date.now();
   if(!state.timer.lastTick) state.timer.lastTick = now;
+
   const deltaSec = Math.floor((now - state.timer.lastTick)/1000);
   if(deltaSec <= 0) return;
 
@@ -490,7 +266,6 @@ setInterval(()=>{
   }
 
   saveState();
-
   const secLeft = 60 - state.timer.carrySeconds;
   const hud = $("#timerSecLeft");
   if(hud) hud.textContent = `${secLeft}s`;
@@ -501,24 +276,44 @@ function earnOneMinute(){
   state.totalMinutes += 1;
 
   const skin = state.equipped.timerSkin;
-  state.sessions.push({ tsISO: nowISO(), minutes: 1, skin });
+  state.sessions.push({ tsISO: nowISO(), minutes:1, skin });
+  state.daily.sessionsToday.push({ tsISO: nowISO(), minutes:1, skin });
 
-  state.daily.sessionsToday.push({ tsISO: nowISO(), minutes: 1, skin });
-
-  state.history.unshift({ ts: nowISO(), delta: +1, reason: "دقيقة مكتملة (Timer)" });
+  state.history.unshift({ ts: nowISO(), delta:+1, reason:"دقيقة مكتملة (Timer)" });
   state.history = state.history.slice(0, 80);
 
   const pop = $("#coinPop");
   if(pop){
     pop.textContent = "+1 SC";
     pop.classList.add("show");
-    setTimeout(()=> pop.classList.remove("show"), 350);
+    setTimeout(()=>pop.classList.remove("show"), 300);
   }
 }
 
 /* =========================================================
   Pages
 ========================================================= */
+function minutesToday(){
+  const t = todayKey();
+  return (state.sessions||[]).filter(s=> (s.tsISO||"").slice(0,10)===t).length;
+}
+function minutesInLastDays(days){
+  const from = Date.now() - days*24*60*60*1000;
+  return (state.sessions||[]).filter(s=> Date.parse(s.tsISO||0) >= from).length;
+}
+function bar(val, max){
+  const pct = clamp((val/(max||1))*100, 0, 100);
+  return `
+    <div style="margin-top:8px;border:1px solid var(--line);border-radius:999px;overflow:hidden;background:rgba(255,255,255,.04)">
+      <div style="width:${pct}%;height:10px;background:var(--pri)"></div>
+    </div>
+    <div class="small" style="margin-top:6px">${val} / ${max} دقيقة</div>
+  `;
+}
+
+/* ---------------------------
+  Timer page (safe even if THREE missing)
+---------------------------- */
 function renderTimer(view){
   const wrap = document.createElement("div");
   wrap.className = "grid two";
@@ -526,8 +321,8 @@ function renderTimer(view){
   const left = document.createElement("div");
   left.className = "card";
   left.innerHTML = `
-    <h3 class="h">تايمر 3D — اسحب ولف</h3>
-    <p class="p">كل دقيقة مكتملة = <b>1 Seraj Coin</b>. اختر Skin من المتجر/الإعدادات.</p>
+    <h3 class="h">التايمر</h3>
+    <p class="p">كل دقيقة مكتملة = <b>1 Seraj Coin</b>.</p>
 
     <div class="timerWrap" id="timerWrap">
       <div class="timerHUD">
@@ -546,9 +341,11 @@ function renderTimer(view){
           <button class="btn primary" id="btnStartStop">${state.timer.running ? "إيقاف" : "تشغيل"}</button>
           <button class="btn" id="btnResetTimer">تصفير العدّاد</button>
         </div>
-        <div class="rtlNote">Drag/Touch للتحكم</div>
       </div>
+
       <div class="coinPop" id="coinPop">+1 SC</div>
+
+      <div id="timer3dOrFallback" style="margin-top:10px"></div>
     </div>
   `;
 
@@ -557,24 +354,14 @@ function renderTimer(view){
   right.innerHTML = `
     <h3 class="h">مختصر اليوم</h3>
     <div class="grid three">
-      <div class="kpi">
-        <div class="n">${minutesToday()}</div>
-        <div class="t">دقائق اليوم</div>
-      </div>
-      <div class="kpi">
-        <div class="n">${state.daily.locked ? "🔒" : "✅"}</div>
-        <div class="t">أهداف اليوم</div>
-      </div>
-      <div class="kpi">
-        <div class="n">${state.equipped.timerSkin.replace("skin_","")}</div>
-        <div class="t">Timer Skin</div>
-      </div>
+      <div class="kpi"><div class="n">${minutesToday()}</div><div class="t">دقائق اليوم</div></div>
+      <div class="kpi"><div class="n">${state.daily.locked ? "🔒" : "✅"}</div><div class="t">أهداف اليوم</div></div>
+      <div class="kpi"><div class="n">${escapeHtml(state.equipped.timerSkin)}</div><div class="t">Skin</div></div>
     </div>
     <div class="sep"></div>
-    <div class="p">ابدأ بجلسة 25–45 دقيقة، وبعدها استراحة 5–10 دقائق. المهم الاستمرارية.</div>
     <div class="row">
-      <a class="btn" href="#goals">تعديل أهداف اليوم</a>
-      <a class="btn" href="#store">فتح المتجر</a>
+      <a class="btn" href="#goals">أهداف اليوم</a>
+      <a class="btn" href="#store">المتجر</a>
     </div>
   `;
 
@@ -582,8 +369,15 @@ function renderTimer(view){
   wrap.appendChild(right);
   view.appendChild(wrap);
 
-  const timerWrap = $("#timerWrap");
-  initTimer3D(timerWrap);
+  // 3D timer placeholder (no crash if Three.js absent)
+  const box = $("#timer3dOrFallback");
+  if(box){
+    if(window.THREE){
+      box.innerHTML = `<div class="small">✅ Three.js موجود — (إذا حاب، بركب لك 3D Timer كامل لاحقًا)</div>`;
+    }else{
+      box.innerHTML = `<div class="small" style="opacity:.85">Three.js مش محمّل — التايمر شغال بدون 3D.</div>`;
+    }
+  }
 
   $("#btnStartStop").onclick = ()=>{
     if(!state.daily.goals){
@@ -606,15 +400,69 @@ function renderTimer(view){
   };
 }
 
+/* ---------------------------
+  Goals + heuristic plan
+---------------------------- */
+function generateStudyPlan(goals){
+  const MIN=25, MAX=55;
+  const subjects = goals.subjects.map(s=>{
+    const target = Math.round(goals.totalMinutes * s.pct / 100);
+    return { name:s.name, left:target };
+  }).sort((a,b)=>b.left-a.left);
+
+  const plan = [];
+  let last=null, last2=null;
+
+  function pick(){
+    const sorted = subjects.slice().sort((a,b)=>b.left-a.left);
+    for(const s of sorted){
+      if(s.left<=0) continue;
+      if(last && last2 && last===s.name && last2===s.name) continue;
+      return s;
+    }
+    return sorted.find(x=>x.left>0) || null;
+  }
+
+  while(subjects.some(s=>s.left>0)){
+    const s = pick();
+    if(!s) break;
+    let chunk = clamp(s.left, MIN, MAX);
+
+    if(s.left < MIN){
+      const prev = plan.slice().reverse().find(x=>x.subject===s.name);
+      if(prev && prev.minutes + s.left <= MAX){
+        prev.minutes += s.left;
+        s.left = 0;
+      }else{
+        chunk = clamp(s.left, 15, 20);
+        plan.push({ subject:s.name, minutes:chunk, quick:true });
+        s.left -= chunk;
+      }
+    }else{
+      plan.push({ subject:s.name, minutes:chunk });
+      s.left -= chunk;
+    }
+    last2 = last; last = s.name;
+    if(plan.length>80) break;
+  }
+  return plan;
+}
+
 function renderGoals(view){
   const card = document.createElement("div");
   card.className = "card";
 
   const goals = state.daily.goals;
+  const subj = goals?.subjects || [
+    {name:"رياضيات", pct:40},
+    {name:"عربي", pct:25},
+    {name:"إنجليزي", pct:20},
+    {name:"مادة 4", pct:15}
+  ];
 
   card.innerHTML = `
     <h3 class="h">أهداف اليوم (إلزامي)</h3>
-    <p class="p">لازم تدخل أهدافك أول مرة كل يوم. بعدها ينفتح كل شيء. <span class="badge">مجموع النسب = 100%</span></p>
+    <p class="p">لا تقدر تستخدم باقي الصفحات قبل إدخال أهداف اليوم.</p>
 
     <div class="grid two">
       <div>
@@ -632,92 +480,54 @@ function renderGoals(view){
 
     <div class="row" style="margin-top:12px">
       <button class="btn" id="btnAddSub">+ إضافة مادة</button>
-      <button class="btn primary" id="btnSaveGoals">حفظ + توليد خطة جلسات</button>
+      <button class="btn primary" id="btnSaveGoals">حفظ + توليد خطة</button>
     </div>
 
     <div class="sep"></div>
     <h3 class="h">الخطة المقترحة</h3>
     <div id="planBox" class="list"></div>
-    <p class="small">قواعد: 25–55 دقيقة للجلسة، منع 3 جلسات متتالية لنفس المادة، وبقايا أقل من 25 تُدمج.</p>
+    <p class="small">قواعد: 25–55 دقيقة للجلسة، منع 3 جلسات متتالية لنفس المادة، وبقايا أقل من 25 تُدمج قدر الإمكان.</p>
   `;
   view.appendChild(card);
 
-  const subj = goals?.subjects || [
-    { name:"رياضيات", pct:40 },
-    { name:"عربي", pct:25 },
-    { name:"إنجليزي", pct:20 },
-    { name:"مادة 4", pct:15 }
-  ];
+  // local editable list
+  const tmp = subj.map(x=>({name:x.name, pct:Number(x.pct)}));
 
   function renderSubjects(){
     const box = $("#subjectsBox");
+    const sum = tmp.reduce((a,b)=>a+Number(b.pct||0),0);
+
     box.innerHTML = `
       <div class="grid two">
-        ${subj.map((s,i)=>`
+        ${tmp.map((s,i)=>`
           <div class="item">
             <div class="row" style="justify-content:space-between">
-              <div style="flex:1; min-width:160px">
+              <div style="flex:1;min-width:160px">
                 <label>المادة</label>
-                <input class="field" data-sub-name="${i}" value="${escapeHtml(s.name)}">
+                <input class="field" data-name="${i}" value="${escapeHtml(s.name)}">
               </div>
               <div style="width:140px">
                 <label>النسبة %</label>
-                <input class="field" type="number" min="0" max="100" step="1" data-sub-pct="${i}" value="${s.pct}">
+                <input class="field" type="number" min="0" max="100" step="1" data-pct="${i}" value="${s.pct}">
               </div>
-              <button class="btn" data-sub-del="${i}">حذف</button>
+              <button class="btn" data-del="${i}">حذف</button>
             </div>
           </div>
         `).join("")}
       </div>
-      <div class="small" id="pctSum">—</div>
+      <div class="small" id="pctSum" style="color:${sum===100?"var(--good)":"var(--warn)"}">مجموع النسب: ${sum}%</div>
     `;
 
-    $$("[data-sub-name]").forEach(inp=>{
-      inp.oninput = ()=>{ subj[inp.dataset.subName].name = inp.value.trim(); updateSum(); };
+    $$("[data-name]").forEach(inp=>{
+      inp.oninput = ()=>{ tmp[Number(inp.dataset.name)].name = inp.value; };
     });
-    $$("[data-sub-pct]").forEach(inp=>{
-      inp.oninput = ()=>{ subj[inp.dataset.subPct].pct = Number(inp.value||0); updateSum(); };
+    $$("[data-pct]").forEach(inp=>{
+      inp.oninput = ()=>{ tmp[Number(inp.dataset.pct)].pct = Number(inp.value||0); renderSubjects(); };
     });
-    $$("[data-sub-del]").forEach(btn=>{
-      btn.onclick = ()=>{
-        subj.splice(Number(btn.dataset.subDel),1);
-        renderSubjects();
-      };
+    $$("[data-del]").forEach(btn=>{
+      btn.onclick = ()=>{ tmp.splice(Number(btn.dataset.del),1); renderSubjects(); };
     });
-
-    updateSum();
   }
-
-  function updateSum(){
-    const sum = subj.reduce((a,b)=>a+Number(b.pct||0),0);
-    const el = $("#pctSum");
-    el.textContent = `مجموع النسب: ${sum}%`;
-    el.style.color = (sum===100) ? "var(--good)" : "var(--warn)";
-  }
-
-  $("#btnAddSub").onclick = ()=>{
-    subj.push({ name:`مادة ${subj.length+1}`, pct:0 });
-    renderSubjects();
-  };
-
-  $("#btnSaveGoals").onclick = ()=>{
-    const totalH = Number($("#gTotalH").value || 0);
-    const totalMinutes = Math.round(totalH * 60);
-    const startTime = $("#gStart").value || "";
-    const sum = subj.reduce((a,b)=>a+Number(b.pct||0),0);
-
-    if(totalMinutes <= 0){ toast("أدخل وقت صحيح", "bad"); return; }
-    if(sum !== 100){ toast("مجموع النسب لازم يكون 100%", "bad"); return; }
-    if(subj.some(s=>!s.name.trim())){ toast("في مادة اسمها فاضي", "bad"); return; }
-
-    state.daily.goals = { totalMinutes, startTime, subjects: subj.map(s=>({name:s.name.trim(), pct:Number(s.pct)})) };
-    state.daily.plan = generateStudyPlan(state.daily.goals);
-    state.daily.locked = false;
-
-    saveState();
-    toast("تم حفظ أهداف اليوم ✅", "good");
-    render();
-  };
 
   function renderPlanBox(){
     const pb = $("#planBox");
@@ -727,91 +537,54 @@ function renderGoals(view){
         <div class="row" style="justify-content:space-between">
           <div>
             <div class="itemTitle">جلسة ${idx+1}: ${escapeHtml(p.subject)}</div>
-            <div class="itemSub">${p.minutes} دقيقة • استراحة 5–10 دقائق بعدها</div>
+            <div class="itemSub">${p.minutes} دقيقة • استراحة 5–10 دقائق</div>
           </div>
           <span class="badge">${p.minutes}m</span>
         </div>
       </div>
-    `).join("") : `<div class="small">لا توجد خطة بعد. اضغط حفظ لتوليدها.</div>`;
+    `).join("") : `<div class="small">لا توجد خطة بعد.</div>`;
   }
+
+  $("#btnAddSub").onclick = ()=>{
+    tmp.push({name:`مادة ${tmp.length+1}`, pct:0});
+    renderSubjects();
+  };
+
+  $("#btnSaveGoals").onclick = ()=>{
+    const totalH = Number($("#gTotalH").value||0);
+    const totalMinutes = Math.round(totalH*60);
+    const startTime = $("#gStart").value || "";
+    const sum = tmp.reduce((a,b)=>a+Number(b.pct||0),0);
+
+    if(totalMinutes<=0){ toast("أدخل وقت صحيح", "bad"); return; }
+    if(sum!==100){ toast("مجموع النسب لازم يكون 100%", "bad"); return; }
+    if(tmp.some(s=>!String(s.name||"").trim())){ toast("في مادة اسمها فاضي", "bad"); return; }
+
+    state.daily.goals = { totalMinutes, startTime, subjects: tmp.map(s=>({name:String(s.name).trim(), pct:Number(s.pct)})) };
+    state.daily.plan = generateStudyPlan(state.daily.goals);
+    state.daily.locked = false;
+    saveState();
+    toast("تم حفظ أهداف اليوم ✅", "good");
+    render();
+  };
 
   renderSubjects();
   renderPlanBox();
 }
 
-function generateStudyPlan(goals){
-  const MIN = 25, MAX = 55;
-
-  const subjects = goals.subjects
-    .map(s=>{
-      const target = Math.round(goals.totalMinutes * s.pct / 100);
-      return { name:s.name, target, left:target };
-    })
-    .sort((a,b)=>b.target-a.target);
-
-  const plan = [];
-  let last = null, last2 = null;
-
-  function pickNext(){
-    const sorted = [...subjects].sort((a,b)=>b.left-a.left);
-    for(const s of sorted){
-      if(s.left <= 0) continue;
-      if(last && last2 && last===s.name && last2===s.name) continue;
-      return s;
-    }
-    return sorted.find(x=>x.left>0) || null;
-  }
-
-  while(subjects.some(s=>s.left>0)){
-    const s = pickNext();
-    if(!s) break;
-
-    let chunk = clamp(s.left, MIN, MAX);
-
-    if(s.left < MIN){
-      const prev = [...plan].reverse().find(x=>x.subject===s.name);
-      if(prev && prev.minutes + s.left <= MAX){
-        prev.minutes += s.left;
-        s.left = 0;
-      }else{
-        chunk = clamp(s.left, 15, 20);
-        plan.push({ subject:s.name, minutes:chunk, quick:true });
-        s.left -= chunk;
-      }
-    }else{
-      plan.push({ subject:s.name, minutes:chunk });
-      s.left -= chunk;
-    }
-
-    last2 = last;
-    last = s.name;
-    if(plan.length > 60) break;
-  }
-
-  for(const s of subjects){
-    if(s.left>0){
-      const prev = [...plan].reverse().find(x=>x.subject===s.name);
-      if(prev && prev.minutes + s.left <= MAX){
-        prev.minutes += s.left;
-      }else{
-        plan.push({ subject:s.name, minutes:s.left, quick:true });
-      }
-    }
-  }
-  return plan;
-}
-
+/* ---------------------------
+  Progress
+---------------------------- */
 function renderProgress(view){
   const card = document.createElement("div");
   card.className = "grid two";
-
-  const left = document.createElement("div");
-  left.className = "card";
 
   const today = minutesToday();
   const week = minutesInLastDays(7);
   const month = minutesInLastDays(30);
 
+  const left = document.createElement("div");
+  left.className = "card";
   left.innerHTML = `
     <h3 class="h">التقدم + العملات</h3>
     <div class="grid three">
@@ -820,25 +593,25 @@ function renderProgress(view){
       <div class="kpi"><div class="n">${state.totalMinutes}</div><div class="t">الإجمالي</div></div>
     </div>
     <div class="sep"></div>
-    <h3 class="h">سجل مختصر</h3>
+    <h3 class="h">History</h3>
     <div class="list" id="histBox"></div>
   `;
 
   const right = document.createElement("div");
   right.className = "card";
   right.innerHTML = `
-    <h3 class="h">خط إنجاز</h3>
+    <h3 class="h">خط الإنجاز</h3>
     <div class="item">
       <div class="itemTitle">اليوم</div>
-      ${bar(today, (state.daily.goals?.totalMinutes||180))}
+      ${bar(today, (state.daily.goals?.totalMinutes || 180))}
     </div>
     <div class="item">
       <div class="itemTitle">آخر 7 أيام</div>
-      ${bar(week, 7*(state.daily.goals?.totalMinutes||180))}
+      ${bar(week, 7*(state.daily.goals?.totalMinutes || 180))}
     </div>
     <div class="item">
       <div class="itemTitle">آخر 30 يوم</div>
-      ${bar(month, 30*(state.daily.goals?.totalMinutes||180))}
+      ${bar(month, 30*(state.daily.goals?.totalMinutes || 180))}
     </div>
   `;
 
@@ -858,21 +631,11 @@ function renderProgress(view){
         <span class="badge">${h.delta>0?"ربح":"صرف"}</span>
       </div>
     </div>
-  `).join("") : `<div class="small">ما في سجل بعد. شغّل التايمر.</div>`;
-}
-
-function bar(val, max){
-  const pct = clamp((val/(max||1))*100, 0, 100);
-  return `
-    <div style="margin-top:8px; border:1px solid var(--line); border-radius:999px; overflow:hidden; background:rgba(255,255,255,.04)">
-      <div style="width:${pct}%; height:10px; background:var(--pri)"></div>
-    </div>
-    <div class="small" style="margin-top:6px">${val} / ${max} دقيقة</div>
-  `;
+  `).join("") : `<div class="small">ما في سجل بعد.</div>`;
 }
 
 /* ---------------------------
-  Store (local)
+  Store
 ---------------------------- */
 const STORE = [
   { id:"skin_fire",  slot:"timerSkin", name:"Timer Skin — Fire",  price:120, desc:"Glow ناري" },
@@ -891,7 +654,7 @@ function renderStore(view){
   const left = document.createElement("div");
   left.className = "card";
   left.innerHTML = `
-    <h3 class="h">المتجر (Seraj Coin)</h3>
+    <h3 class="h">المتجر</h3>
     <p class="p">1 Coin لكل دقيقة. الأشياء الكبيرة بدها وقت أكثر.</p>
     <div class="grid" id="storeList"></div>
   `;
@@ -900,15 +663,12 @@ function renderStore(view){
   right.className = "card";
   right.innerHTML = `
     <h3 class="h">مخزونك</h3>
-    <div class="item">
-      <div class="itemTitle">الرصيد</div>
-      <div class="itemSub"><b>${state.coins} SC</b></div>
-    </div>
+    <div class="item"><div class="itemTitle">الرصيد</div><div class="itemSub"><b>${state.coins} SC</b></div></div>
     <div class="sep"></div>
     <div class="item">
       <div class="itemTitle">المجهز الآن</div>
-      <div class="itemSub">Timer Skin: <b>${state.equipped.timerSkin}</b></div>
-      <div class="itemSub">Background: <b>${state.equipped.bgTheme}</b></div>
+      <div class="itemSub">Timer Skin: <b>${escapeHtml(state.equipped.timerSkin)}</b></div>
+      <div class="itemSub">Background: <b>${escapeHtml(state.equipped.bgTheme)}</b></div>
     </div>
   `;
 
@@ -919,13 +679,13 @@ function renderStore(view){
   const list = $("#storeList");
   list.innerHTML = STORE.map(it=>{
     const owned = !!state.inventory[it.id];
-    const equipped = (state.equipped[it.slot] === it.id);
+    const equipped = state.equipped[it.slot] === it.id;
     const canBuy = state.coins >= it.price;
 
     return `
       <div class="item">
         <div class="row" style="justify-content:space-between">
-          <div style="min-width:200px">
+          <div style="min-width:220px">
             <div class="itemTitle">${escapeHtml(it.name)}</div>
             <div class="itemSub">${escapeHtml(it.desc)} • السعر: <b>${it.price} SC</b></div>
           </div>
@@ -944,7 +704,6 @@ function renderStore(view){
   $$("[data-buy]").forEach(b=> b.onclick = ()=> buyItem(b.dataset.buy));
   $$("[data-eq]").forEach(b=> b.onclick = ()=> equipItem(b.dataset.eq));
 }
-
 function buyItem(id){
   const it = STORE.find(x=>x.id===id);
   if(!it) return;
@@ -955,17 +714,14 @@ function buyItem(id){
   state.inventory[it.id] = true;
   state.history.unshift({ ts: nowISO(), delta: -it.price, reason: `شراء: ${it.name}` });
   state.history = state.history.slice(0, 80);
-
   saveState();
   toast("تم الشراء ✅", "good");
   render();
 }
-
 function equipItem(id){
   const it = STORE.find(x=>x.id===id);
   if(!it) return;
   if(!state.inventory[it.id]){ toast("لازم تشتريه أولاً", "bad"); return; }
-
   state.equipped[it.slot] = it.id;
   saveState();
   toast("تم التجهيز ✅", "good");
@@ -973,8 +729,18 @@ function equipItem(id){
 }
 
 /* ---------------------------
-  Statistics + Badges
+  Stats + Badges
 ---------------------------- */
+function computeBadges(total){
+  const defs = [
+    { at:60,   icon:"🥉", name:"ساعة إنجاز", desc:"وصلت 60 دقيقة إجمالي" },
+    { at:300,  icon:"🥈", name:"5 ساعات",    desc:"استمراريتك ممتازة" },
+    { at:600,  icon:"🥇", name:"10 ساعات",   desc:"أنت جدي بالتوجيهي" },
+    { at:1200, icon:"🏅", name:"20 ساعة",    desc:"محرك قوي" },
+    { at:2400, icon:"🏆", name:"40 ساعة",    desc:"مستوى متقدم" }
+  ];
+  return defs.map(d=>({ ...d, earned: total>=d.at }));
+}
 function renderStats(view){
   const card = document.createElement("div");
   card.className = "grid two";
@@ -982,8 +748,7 @@ function renderStats(view){
   const today = minutesToday();
   const week = minutesInLastDays(7);
   const month = minutesInLastDays(30);
-  const total = state.totalMinutes;
-  const badges = computeBadges(total);
+  const badges = computeBadges(state.totalMinutes);
 
   const left = document.createElement("div");
   left.className = "card";
@@ -995,7 +760,7 @@ function renderStats(view){
       <div class="kpi"><div class="n">${month}</div><div class="t">الشهر</div></div>
     </div>
     <div class="sep"></div>
-    <div class="kpi"><div class="n">${total}</div><div class="t">الإجمالي (دقيقة)</div></div>
+    <div class="kpi"><div class="n">${state.totalMinutes}</div><div class="t">الإجمالي (دقيقة)</div></div>
   `;
 
   const right = document.createElement("div");
@@ -1010,32 +775,53 @@ function renderStats(view){
               <div class="itemTitle">${b.icon} ${escapeHtml(b.name)}</div>
               <div class="itemSub">${escapeHtml(b.desc)}</div>
             </div>
-            <span class="badge">${b.earned ? "مُكتسب" : "لسه"}</span>
+            <span class="badge">${b.earned?"مُكتسب":"لسه"}</span>
           </div>
         </div>
       `).join("")}
     </div>
   `;
-
   card.appendChild(left);
   card.appendChild(right);
   view.appendChild(card);
 }
 
-function computeBadges(totalMinutes){
-  const defs = [
-    { at: 60,   icon:"🥉", name:"ساعة إنجاز", desc:"وصلت 60 دقيقة إجمالي" },
-    { at: 300,  icon:"🥈", name:"5 ساعات",    desc:"استمراريتك ممتازة" },
-    { at: 600,  icon:"🥇", name:"10 ساعات",   desc:"أنت جدي بالتوجيهي" },
-    { at: 1200, icon:"🏅", name:"20 ساعة",    desc:"محرك قوي" },
-    { at: 2400, icon:"🏆", name:"40 ساعة",    desc:"مستوى متقدم" },
-  ];
-  return defs.map(d=>({ ...d, earned: totalMinutes >= d.at }));
-}
-
 /* ---------------------------
-  Avatar / Profile (SVG)
+  Avatar/Profile (simple SVG)
 ---------------------------- */
+function opt(current, arr){
+  return arr.map(v=>`<option value="${v}" ${v===current?"selected":""}>${v}</option>`).join("");
+}
+function buildAvatarSVG(p){
+  const mouth = p.face==="smile"
+    ? `<path d="M78 112 Q100 128 122 112" stroke="#2b2b2b" stroke-width="6" fill="none" stroke-linecap="round"/>`
+    : p.face==="happy"
+      ? `<path d="M76 110 Q100 140 124 110" stroke="#2b2b2b" stroke-width="6" fill="none" stroke-linecap="round"/>`
+      : `<path d="M80 118 L120 118" stroke="#2b2b2b" stroke-width="6" stroke-linecap="round"/>`;
+
+  const g = p.glasses==="round"
+    ? `<circle cx="78" cy="92" r="16" stroke="#111" stroke-width="6" fill="rgba(255,255,255,.2)"/>
+       <circle cx="122" cy="92" r="16" stroke="#111" stroke-width="6" fill="rgba(255,255,255,.2)"/>
+       <path d="M94 92 L106 92" stroke="#111" stroke-width="6" stroke-linecap="round"/>`
+    : p.glasses==="square"
+      ? `<rect x="62" y="76" width="32" height="32" rx="8" stroke="#111" stroke-width="6" fill="rgba(255,255,255,.2)"/>
+         <rect x="106" y="76" width="32" height="32" rx="8" stroke="#111" stroke-width="6" fill="rgba(255,255,255,.2)"/>
+         <path d="M94 92 L106 92" stroke="#111" stroke-width="6" stroke-linecap="round"/>`
+      : "";
+
+  return `
+  <svg width="220" height="220" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" aria-label="Seraj Avatar">
+    <g>
+      <circle cx="100" cy="90" r="56" fill="${p.skin}"/>
+      <path d="M52 82 Q100 30 148 82 Q132 50 100 46 Q68 50 52 82Z" fill="${p.hair}"/>
+      <circle cx="80" cy="92" r="7" fill="#2b2b2b"/>
+      <circle cx="120" cy="92" r="7" fill="#2b2b2b"/>
+      ${g}
+      ${mouth}
+      <path d="M48 156 Q100 128 152 156 L152 200 L48 200Z" fill="${p.clothes}"/>
+    </g>
+  </svg>`;
+}
 function renderProfile(view){
   const card = document.createElement("div");
   card.className = "grid two";
@@ -1049,16 +835,12 @@ function renderProfile(view){
       <div><label>لون الشعر</label><input id="avHair" class="field" type="color" value="${state.avatar.parts.hair}"></div>
       <div>
         <label>نظارة</label>
-        <select id="avGlasses" class="field">
-          ${opt(state.avatar.parts.glasses, ["none","round","square"])}
-        </select>
+        <select id="avGlasses" class="field">${opt(state.avatar.parts.glasses, ["none","round","square"])}</select>
       </div>
       <div><label>الملابس</label><input id="avClothes" class="field" type="color" value="${state.avatar.parts.clothes}"></div>
       <div>
         <label>التعبير</label>
-        <select id="avFace" class="field">
-          ${opt(state.avatar.parts.face, ["smile","serious","happy"])}
-        </select>
+        <select id="avFace" class="field">${opt(state.avatar.parts.face, ["smile","serious","happy"])}</select>
       </div>
     </div>
     <div class="row" style="margin-top:12px">
@@ -1070,7 +852,7 @@ function renderProfile(view){
   right.className = "card";
   right.innerHTML = `
     <h3 class="h">معاينة</h3>
-    <div class="item" style="display:grid; place-items:center; min-height:260px" id="avatarPreview"></div>
+    <div class="item" style="display:grid;place-items:center;min-height:260px" id="avatarPreview"></div>
   `;
 
   card.appendChild(left);
@@ -1078,17 +860,18 @@ function renderProfile(view){
   view.appendChild(card);
 
   const preview = $("#avatarPreview");
+
   function rebuild(){
-    const parts = {
+    const p = {
       skin: $("#avSkin").value,
       hair: $("#avHair").value,
       glasses: $("#avGlasses").value,
       clothes: $("#avClothes").value,
       face: $("#avFace").value
     };
-    const svg = buildAvatarSVG(parts);
+    const svg = buildAvatarSVG(p);
     preview.innerHTML = svg;
-    return {parts, svg};
+    return {p, svg};
   }
 
   rebuild();
@@ -1098,53 +881,13 @@ function renderProfile(view){
   });
 
   $("#btnSaveAvatar").onclick = ()=>{
-    const {parts, svg} = rebuild();
-    state.avatar.parts = parts;
+    const {p, svg} = rebuild();
+    state.avatar.parts = p;
     state.avatar.svg = svg;
     saveState();
     toast("تم حفظ الأفاتار ✅", "good");
     paintShell();
   };
-}
-
-function buildAvatarSVG(parts){
-  const mouth = parts.face==="smile"
-    ? `<path d="M78 112 Q100 128 122 112" stroke="#2b2b2b" stroke-width="6" fill="none" stroke-linecap="round"/>`
-    : parts.face==="happy"
-      ? `<path d="M76 110 Q100 140 124 110" stroke="#2b2b2b" stroke-width="6" fill="none" stroke-linecap="round"/>`
-      : `<path d="M80 118 L120 118" stroke="#2b2b2b" stroke-width="6" stroke-linecap="round"/>`;
-
-  const g = parts.glasses==="round"
-    ? `<circle cx="78" cy="92" r="16" stroke="#111" stroke-width="6" fill="rgba(255,255,255,.2)"/>
-       <circle cx="122" cy="92" r="16" stroke="#111" stroke-width="6" fill="rgba(255,255,255,.2)"/>
-       <path d="M94 92 L106 92" stroke="#111" stroke-width="6" stroke-linecap="round"/>`
-    : parts.glasses==="square"
-      ? `<rect x="62" y="76" width="32" height="32" rx="8" stroke="#111" stroke-width="6" fill="rgba(255,255,255,.2)"/>
-         <rect x="106" y="76" width="32" height="32" rx="8" stroke="#111" stroke-width="6" fill="rgba(255,255,255,.2)"/>
-         <path d="M94 92 L106 92" stroke="#111" stroke-width="6" stroke-linecap="round"/>`
-      : "";
-
-  return `
-  <svg width="220" height="220" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" aria-label="Seraj Avatar">
-    <defs>
-      <filter id="s" x="-30%" y="-30%" width="160%" height="160%">
-        <feDropShadow dx="0" dy="10" stdDeviation="10" flood-color="rgba(0,0,0,.35)"/>
-      </filter>
-    </defs>
-    <g filter="url(#s)">
-      <circle cx="100" cy="90" r="56" fill="${parts.skin}"/>
-      <path d="M52 82 Q100 30 148 82 Q132 50 100 46 Q68 50 52 82Z" fill="${parts.hair}"/>
-      <circle cx="80" cy="92" r="7" fill="#2b2b2b"/>
-      <circle cx="120" cy="92" r="7" fill="#2b2b2b"/>
-      ${g}
-      ${mouth}
-      <path d="M48 156 Q100 128 152 156 L152 200 L48 200Z" fill="${parts.clothes}"/>
-    </g>
-  </svg>`;
-}
-
-function opt(current, arr){
-  return arr.map(v=>`<option value="${v}" ${v===current?"selected":""}>${v}</option>`).join("");
 }
 
 /* ---------------------------
@@ -1186,16 +929,15 @@ function renderNotebooks(view){
   `;
   view.appendChild(card);
 
-  function getArr(){
-    const t = $("#nbType").value;
-    return state.notebooks[t];
+  function label(t){
+    return t==="strengths" ? "نقاط قوة" : t==="weaknesses" ? "نقاط ضعف" : "ملاحظات الدرس";
   }
 
   function renderList(){
     const t = $("#nbType").value;
     const q = ($("#nbSearch").value||"").trim().toLowerCase();
     const arr = state.notebooks[t] || [];
-    const filtered = q ? arr.filter(x=> (x.text||"").toLowerCase().includes(q)) : arr;
+    const filtered = q ? arr.filter(x=> String(x.text||"").toLowerCase().includes(q)) : arr;
 
     const box = $("#nbList");
     box.innerHTML = filtered.length ? filtered
@@ -1225,15 +967,14 @@ function renderNotebooks(view){
         renderList();
       };
     });
-
     $$("[data-edit]").forEach(b=>{
       b.onclick = ()=>{
         const id = b.dataset.edit;
         const item = (state.notebooks[t]||[]).find(x=>x.id===id);
         if(!item) return;
         const txt = prompt("عدّل النص:", item.text);
-        if(txt === null) return;
-        item.text = txt.trim();
+        if(txt===null) return;
+        item.text = String(txt).trim();
         saveState();
         renderList();
       };
@@ -1247,22 +988,18 @@ function renderNotebooks(view){
     const t = $("#nbType").value;
     const text = ($("#nbText").value||"").trim();
     if(!text){ toast("اكتب نص", "bad"); return; }
-    const item = { id: crypto.randomUUID(), ts: nowISO(), text };
+    const item = { id: uuid(), ts: nowISO(), text };
     state.notebooks[t] = [item, ...(state.notebooks[t]||[])];
     $("#nbText").value = "";
     saveState();
     renderList();
   };
 
-  function label(t){
-    return t==="strengths" ? "نقاط قوة" : t==="weaknesses" ? "نقاط ضعف" : "ملاحظات الدرس";
-  }
-
   renderList();
 }
 
 /* ---------------------------
-  Long-term Plan
+  Long plan
 ---------------------------- */
 function renderPlan(view){
   const card = document.createElement("div");
@@ -1324,7 +1061,7 @@ function renderPlan(view){
   };
 
   $("#lpAddTask").onclick = ()=>{
-    if(!state.longPlan.days?.length){
+    if(!state.longPlan.days || !state.longPlan.days.length){
       toast("اضغط توليد أيام الخطة أولاً", "bad");
       return;
     }
@@ -1335,31 +1072,28 @@ function renderPlan(view){
 
     const day = state.longPlan.days.find(d=>d.date===date);
     if(!day){ toast("التاريخ خارج نطاق الخطة", "bad"); return; }
-    day.items.unshift({ id: crypto.randomUUID(), subject, task, done:false });
+    day.items.unshift({ id: uuid(), subject, task, done:false });
 
-    $("#lpSub").value = ""; $("#lpTask").value = "";
+    $("#lpSub").value=""; $("#lpTask").value="";
     saveState();
     renderPlanList();
   };
 
   function renderPlanList(){
     const box = $("#lpList");
-    if(!state.longPlan.days?.length){
+    if(!state.longPlan.days || !state.longPlan.days.length){
       box.innerHTML = `<div class="small">اضغط "توليد أيام الخطة" لتبدأ.</div>`;
       return;
     }
-    const focusDate = $("#lpDate").value || todayKey();
-    const day = state.longPlan.days.find(d=>d.date===focusDate);
-    if(!day){
-      box.innerHTML = `<div class="small">اختر تاريخ داخل نطاق الخطة.</div>`;
-      return;
-    }
+    const focus = $("#lpDate").value || todayKey();
+    const day = state.longPlan.days.find(d=>d.date===focus);
+    if(!day){ box.innerHTML = `<div class="small">اختر تاريخ داخل نطاق الخطة.</div>`; return; }
 
     box.innerHTML = `
       <div class="item">
         <div class="row" style="justify-content:space-between">
           <div>
-            <div class="itemTitle">مهام ${focusDate}</div>
+            <div class="itemTitle">مهام ${focus}</div>
             <div class="itemSub">${day.items.length} مهمة</div>
           </div>
           <span class="badge">${state.longPlan.rangeDays} يوم</span>
@@ -1383,18 +1117,16 @@ function renderPlan(view){
 
     $$("[data-done]").forEach(b=>{
       b.onclick = ()=>{
-        const id = b.dataset.done;
-        const item = day.items.find(x=>x.id===id);
-        if(!item) return;
-        item.done = !item.done;
+        const it = day.items.find(x=>x.id===b.dataset.done);
+        if(!it) return;
+        it.done = !it.done;
         saveState();
         renderPlanList();
       };
     });
     $$("[data-del]").forEach(b=>{
       b.onclick = ()=>{
-        const id = b.dataset.del;
-        day.items = day.items.filter(x=>x.id!==id);
+        day.items = day.items.filter(x=>x.id!==b.dataset.del);
         saveState();
         renderPlanList();
       };
@@ -1406,7 +1138,7 @@ function renderPlan(view){
 }
 
 /* ---------------------------
-  Leaderboard (Local)
+  Leaderboard (local)
 ---------------------------- */
 function renderLeaderboardLocal(view){
   const card = document.createElement("div");
@@ -1414,7 +1146,6 @@ function renderLeaderboardLocal(view){
   card.innerHTML = `
     <h3 class="h">🏆 المتصدرين (محلي)</h3>
     <p class="p">بدون Firebase: يعرض بيانات جهازك فقط.</p>
-
     <div class="list">
       <div class="item">
         <div class="row" style="justify-content:space-between">
@@ -1437,74 +1168,6 @@ function renderLeaderboardLocal(view){
 /* ---------------------------
   Settings
 ---------------------------- */
-function renderSettings(view){
-  const card = document.createElement("div");
-  card.className = "card";
-  card.innerHTML = `
-    <h3 class="h">الإعدادات</h3>
-
-    <div class="grid two">
-      <div>
-        <label>Timer Skin</label>
-        <select id="setSkin" class="field">${ownedOptions("timerSkin")}</select>
-      </div>
-      <div>
-        <label>Background</label>
-        <select id="setBg" class="field">${ownedOptions("bgTheme")}</select>
-      </div>
-      <div>
-        <label>الصوت</label>
-        <select id="setSound" class="field">${opt(String(state.settings.sound), ["true","false"])}</select>
-      </div>
-    </div>
-
-    <div class="sep"></div>
-
-    <div class="row">
-      <button class="btn" id="resetDaily">Reset بيانات اليوم (Goals + Sessions)</button>
-      <button class="btn ghost" id="resetAll">مسح كل البيانات (Reset كامل)</button>
-    </div>
-  `;
-  view.appendChild(card);
-
-  $("#setSkin").onchange = ()=>{
-    state.equipped.timerSkin = $("#setSkin").value;
-    saveState();
-    toast("تم تغيير Skin ✅", "good");
-  };
-  $("#setBg").onchange = ()=>{
-    state.equipped.bgTheme = $("#setBg").value;
-    saveState();
-    setBackgroundTheme();
-    toast("تم تغيير الخلفية ✅", "good");
-  };
-  $("#setSound").onchange = ()=>{
-    state.settings.sound = ($("#setSound").value==="true");
-    saveState();
-    toast("تم ✅", "good");
-  };
-
-  $("#resetDaily").onclick = ()=>{
-    state.daily.goals = null;
-    state.daily.plan = [];
-    state.daily.sessionsToday = [];
-    state.daily.locked = true;
-    state.timer.running = false;
-    state.timer.carrySeconds = 0;
-    state.timer.lastTick = 0;
-    saveState();
-    toast("تم Reset لبيانات اليوم", "good");
-    location.hash = "#goals";
-  };
-
-  $("#resetAll").onclick = ()=>{
-    if(confirm("متأكد بدك تمسح كل بيانات سراج على هذا الجهاز؟")){
-      localStorage.removeItem(LS_KEY);
-      location.reload();
-    }
-  };
-}
-
 function ownedOptions(slot){
   const ownedIds = Object.keys(state.inventory||{}).filter(id=>state.inventory[id]);
   const items = [];
@@ -1521,36 +1184,77 @@ function ownedOptions(slot){
   }
   return items.map(x=>`<option value="${x.id}" ${state.equipped[slot]===x.id?"selected":""}>${x.label}</option>`).join("");
 }
+function renderSettings(view){
+  const card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML = `
+    <h3 class="h">الإعدادات</h3>
+    <div class="grid two">
+      <div><label>Timer Skin</label><select id="setSkin" class="field">${ownedOptions("timerSkin")}</select></div>
+      <div><label>Background</label><select id="setBg" class="field">${ownedOptions("bgTheme")}</select></div>
+      <div><label>الصوت</label><select id="setSound" class="field">${opt(String(state.settings.sound), ["true","false"])}</select></div>
+    </div>
 
-/* ---------------------------
-  Metrics
----------------------------- */
-function minutesToday(){
-  const t = todayKey();
-  return (state.sessions||[]).filter(s=> (s.tsISO||"").slice(0,10)===t).length;
-}
-function minutesInLastDays(days){
-  const now = Date.now();
-  const from = now - (days*24*60*60*1000);
-  return (state.sessions||[]).filter(s=>{
-    const ts = Date.parse(s.tsISO || 0);
-    return ts >= from;
-  }).length;
+    <div class="sep"></div>
+
+    <div class="row">
+      <button class="btn" id="resetDaily">Reset بيانات اليوم</button>
+      <button class="btn ghost" id="resetAll">مسح كل البيانات</button>
+    </div>
+  `;
+  view.appendChild(card);
+
+  $("#setSkin").onchange = ()=>{
+    state.equipped.timerSkin = $("#setSkin").value;
+    saveState();
+    toast("تم ✅", "good");
+  };
+  $("#setBg").onchange = ()=>{
+    state.equipped.bgTheme = $("#setBg").value;
+    saveState();
+    setBackgroundTheme();
+    toast("تم ✅", "good");
+  };
+  $("#setSound").onchange = ()=>{
+    state.settings.sound = ($("#setSound").value==="true");
+    saveState();
+    toast("تم ✅", "good");
+  };
+
+  $("#resetDaily").onclick = ()=>{
+    state.daily.goals = null;
+    state.daily.plan = [];
+    state.daily.sessionsToday = [];
+    state.daily.locked = true;
+    state.timer.running = false;
+    state.timer.carrySeconds = 0;
+    state.timer.lastTick = 0;
+    saveState();
+    toast("تم Reset لليوم", "good");
+    location.hash = "#goals";
+  };
+
+  $("#resetAll").onclick = ()=>{
+    if(confirm("متأكد بدك تمسح كل بيانات سراج على هذا الجهاز؟")){
+      localStorage.removeItem(LS_KEY);
+      location.reload();
+    }
+  };
 }
 
 /* =========================================================
-  Boot (opens مباشرة)
+  BOOT
 ========================================================= */
 (function boot(){
   dailyResetIfNeeded();
 
-  // تأكد إنك داخل main مباشرة
+  // فتح مباشر (بدون auth)
   const auth = $("#authScreen");
   const main = $("#mainScreen");
   if(auth) auth.classList.add("hidden");
   if(main) main.classList.remove("hidden");
 
-  // زر logout نخليه Reset اختياري
+  // زر logout: Reset اختياري
   const btnLogout = $("#btnLogout");
   if(btnLogout){
     btnLogout.textContent = "إعادة ضبط";
