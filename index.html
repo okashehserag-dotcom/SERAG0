@@ -1,1 +1,117 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0b1220" />
+  <title>سراج — SERAG</title>
+  <link rel="icon" href="data:,">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+  <!-- Background layers -->
+  <div class="bg" aria-hidden="true">
+    <div class="bgLayer bgBase"></div>
+    <div class="bgLayer bgAnim" id="bgAnim"></div>
+    <div class="grain"></div>
+    <div class="glow"></div>
+  </div>
+
+  <!-- Topbar -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">س</div>
+      <div class="brandText">
+        <div class="brandTitle">سراج</div>
+        <div class="brandSub">Timer 3D • دفاتر • مهام • متجر • إحصائيات</div>
+      </div>
+    </div>
+
+    <div class="topRight">
+      <div class="pill">
+        <span class="muted">الرصيد</span>
+        <b id="coinsBadge">0 SC</b>
+      </div>
+      <div class="pill">
+        <span class="muted">اسمك</span>
+        <b id="userBadge">—</b>
+      </div>
+      <button class="pill pillBtn" id="btnQuick25" title="بدء 25 دقيقة">
+        ⚡ بدء 25
+      </button>
+    </div>
+  </header>
+
+  <main class="app">
+    <aside class="side">
+      <div class="sideHeader">
+        <div class="sideTitle">التبويبات</div>
+        <div class="sideHint">يعمل على GitHub Pages — Hash Router</div>
+      </div>
+
+      <nav class="nav">
+        <a class="navItem" href="#home" data-route>
+          <span>⏱️</span><span>الصفحة الرئيسية (Timer 3D)</span>
+        </a>
+        <a class="navItem" href="#notebooks" data-route>
+          <span>📒</span><span>دفاترك</span>
+        </a>
+        <a class="navItem" href="#daily" data-route>
+          <span>✅</span><span>المهام اليومية</span>
+        </a>
+        <a class="navItem" href="#stats" data-route>
+          <span>📊</span><span>الإحصائيات</span>
+        </a>
+        <a class="navItem" href="#store" data-route>
+          <span>🛒</span><span>المتجر</span>
+        </a>
+        <a class="navItem" href="#settings" data-route>
+          <span>⚙️</span><span>الإعدادات</span>
+        </a>
+      </nav>
+
+      <div class="sideFooter">
+        <div class="tiny muted">نصيحة: Ctrl+Shift+R إذا علق الكاش</div>
+      </div>
+    </aside>
+
+    <section class="view">
+      <div class="viewInner" id="view"></div>
+      <footer class="footer">
+        <div class="tiny muted">SERAG — Offline • LocalStorage</div>
+        <div class="tiny muted" id="weekHint">—</div>
+      </footer>
+    </section>
+  </main>
+
+  <!-- Toast -->
+  <div class="toastHost" id="toastHost" aria-live="polite"></div>
+
+  <!-- Name modal (إجباري) -->
+  <div class="modalOverlay hidden" id="nameModal" role="dialog" aria-modal="true">
+    <div class="modal">
+      <div class="modalTitle">أهلاً! اكتب اسمك 👋</div>
+      <div class="modalSub">الاسم ينحفظ على نفس الجهاز (بدون تسجيل دخول).</div>
+
+      <label class="label">اسمك</label>
+      <input class="field" id="nameInput" placeholder="مثلاً: أحمد" maxlength="24" />
+
+      <div class="row end gap">
+        <button class="btn primary" id="nameSave">دخول</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confetti canvas -->
+  <canvas id="fxCanvas" aria-hidden="true"></canvas>
+
+  <script type="module" src="script.js"></script>
+</body>
+</html>
 
