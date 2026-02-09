@@ -170,72 +170,49 @@ async function initFirebase(){
   }catch(e){
     console.error(e);
     toast("تعذر تحميل Firebase.js — تأكد من رفع الملف", "bad");
-  }
+/* ---------------------------
+  Local-only mode (NO Firebase)
+---------------------------- */
+
+// إذا بدك تلغي Firebase نهائيًا، خلّي كل دوال Firebase فاضية عشان ما ينكسر الكود.
+
+async function initFirebase(){ /* local only */ }
+
 async function googleLogin(){
-  // Local mode: "login" instantly
+  // Local mode: open instantly (لو لسه عندك زر)
   state.user.uid = "local";
   state.user.displayName = state.user.displayName || "طالب سراج";
   state.user.photoURL = "";
   saveState();
 
-  document.querySelector("#authScreen").classList.add("hidden");
-  document.querySelector("#mainScreen").classList.remove("hidden");
+  const a = document.querySelector("#authScreen");
+  const m = document.querySelector("#mainScreen");
+  if(a) a.classList.add("hidden");
+  if(m) m.classList.remove("hidden");
 
   if(!location.hash) location.hash = "#timer";
   render();
 }
+
 async function logout(){
-  // Local mode: just reset session UI (keep data)
-  document.querySelector("#authScreen").classList.remove("hidden");
-  document.querySelector("#mainScreen").classList.add("hidden");
+  // Local mode: optional
+  const a = document.querySelector("#authScreen");
+  const m = document.querySelector("#mainScreen");
+  if(a) a.classList.remove("hidden");
+  if(m) m.classList.add("hidden");
   location.hash = "";
 }
 
-async function ensureUserDoc(user){
-  const { fb, db } = FB;
-  const ref = fb.doc(db, "users", user.uid);
-  const snap = await fb.getDoc(ref);
-  if(!snap.exists()){
-    await fb.setDoc(ref, {
-      displayName: user.displayName || "طالب سراج",
-      photoURL: user.photoURL || "",
-      coins: state.coins || 0,
-      totalMinutes: state.totalMinutes || 0,
-      equipped: state.equipped,
-      inventory: state.inventory,
-      avatar: state.avatar,
-      updatedAt: fb.serverTimestamp()
-    }, { merge:true });
-  }
-  return ref;
-}
+async function ensureUserDoc(user){ /* local only */ }
+async function pullUserDoc(user){ /* local only */ }
 
-async function pullUserDoc(user){
-  const { fb, db } = FB;
-  const ref = fb.doc(db, "users", user.uid);
-  const snap = await fb.getDoc(ref);
-  if(!snap.exists()) return;
-
-  const data = snap.data();
-
-  // Merge strategy: keep higher progress to avoid losing work
-  state.coins = Math.max(state.coins || 0, data.coins || 0);
-  state.totalMinutes = Math.max(state.totalMinutes || 0, data.totalMinutes || 0);
-
-  // Inventory/equipped/avatar: merge
-  state.inventory = { ...(data.inventory || {}), ...(state.inventory || {}) };
-  state.equipped = deepMerge(state.equipped, data.equipped || {});
-  state.avatar = deepMerge(state.avatar, data.avatar || {});
-
-  saveState();
-}
 function syncUserThrottled(){ /* local only */ }
 async function pushUserDoc(){ /* local only */ }
-  
+
     const { fb, db } = FB;
     const ref = fb.doc(db, "users", authedUser.uid);
     await fb.updateDoc(ref, {
-      displayName: state.user.displayName || authedUser.displayName || "طالب سراج",
+      displayName: state.user.displayName || authedUser.displayName || "سراج",
       photoURL: state.user.photoURL || authedUser.photoURL || "",
       coins: state.coins,
       totalMinutes: state.totalMinutes,
@@ -246,9 +223,9 @@ async function pushUserDoc(){ /* local only */ }
     });
   }catch(e){
     console.error(e);
+
   }
 }
-
 /* ---------------------------
   App shell paint
 ---------------------------- */
