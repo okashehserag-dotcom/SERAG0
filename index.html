@@ -1,1 +1,108 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#0b1220" />
+  <title>Seraj — سراج</title>
 
+  <!-- منع خطأ favicon -->
+  <link rel="icon" href="data:,">
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+  <!-- خلفية -->
+  <div class="bg" aria-hidden="true"></div>
+
+  <!-- Topbar -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo">س</div>
+      <div>
+        <div class="brandTitle">سراج</div>
+        <div class="brandSub">رفيق التوجيهي — Timer + أهداف + متجر + دفاتر</div>
+      </div>
+    </div>
+
+    <div class="topPills">
+      <div class="pill" id="dailyLockPill">—</div>
+      <div class="pill">
+        <span class="muted">الرصيد</span>
+        <b id="coinBadge">0 SC</b>
+      </div>
+      <div class="pill">
+        <span class="muted">الإجمالي</span>
+        <b><span id="totalMinPill">0</span> دقيقة</b>
+      </div>
+
+      <div class="userMini">
+        <div class="miniAvatar" id="miniAvatar">🙂</div>
+        <div class="miniName" id="userName">طالب سراج</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- App Layout -->
+  <main class="app">
+    <aside class="side">
+      <div class="sideHeader">
+        <div class="sideTitle" id="pageTitle">—</div>
+        <div class="sideHint">التنقل عبر #hash — يعمل على GitHub Pages</div>
+      </div>
+
+      <nav class="nav">
+        <a class="navItem" data-route href="#timer">⏱️ Timer 3D</a>
+        <a class="navItem" data-route href="#goals">✅ Daily Goals</a>
+        <a class="navItem" data-route href="#progress">🪙 Progress</a>
+        <a class="navItem" data-route href="#store">🛒 Store</a>
+        <a class="navItem" data-route href="#stats">📊 Statistics</a>
+        <a class="navItem" data-route href="#notebooks">📒 Notebooks</a>
+        <a class="navItem" data-route href="#plan">🗓️ Long-term Plan</a>
+        <a class="navItem" data-route href="#leaderboard">🏆 Leaderboard</a>
+        <a class="navItem" data-route href="#settings">⚙️ Settings</a>
+        <a class="navItem" data-route href="#profile">🧑‍🎨 Profile / Avatar</a>
+      </nav>
+
+      <div class="sideFooter">
+        <button class="btn ghost full" id="btnResetApp">إعادة ضبط كل البيانات</button>
+        <div class="tiny muted">إذا صار تعارض كاش: Ctrl+Shift+R</div>
+      </div>
+    </aside>
+
+    <section class="view" id="view"></section>
+  </main>
+
+  <!-- Toast -->
+  <div class="toastHost" id="toastHost" aria-live="polite"></div>
+
+  <!-- Name modal (إجباري أول مرة) -->
+  <div class="modalOverlay hidden" id="nameModal">
+    <div class="modal">
+      <div class="modalTitle">أهلاً! شو اسمك؟</div>
+      <div class="modalSub">الاسم ينحفظ على نفس الجهاز (بدون تسجيل دخول).</div>
+
+      <label class="label">الاسم</label>
+      <input class="field" id="nameInput" placeholder="مثلاً: أحمد" maxlength="24" />
+
+      <div class="row end">
+        <button class="btn primary" id="nameSave">حفظ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Daily lock modal (إذا حاول يدخل صفحات غير goals) -->
+  <div class="modalOverlay hidden" id="lockModal">
+    <div class="modal">
+      <div class="modalTitle">لازم تدخل أهداف اليوم أولاً 🔒</div>
+      <div class="modalSub">بعدها بتنفتح كل الصفحات.</div>
+      <div class="row end">
+        <button class="btn primary" id="goGoalsNow">روح على Daily Goals</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="script.js"></script>
+</body>
+</html>
