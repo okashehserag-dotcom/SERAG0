@@ -171,19 +171,18 @@ async function initFirebase(){
     console.error(e);
     toast("تعذر تحميل Firebase.js — تأكد من رفع الملف", "bad");
   }
-}
-
 async function googleLogin(){
-  if(!FB) return;
-  try{
-    const { fb, auth, provider } = FB;
-    const res = await fb.signInWithPopup(auth, provider);
-    // authed handled by onAuthStateChanged
-    toast("تم تسجيل الدخول ✅", "good");
-  }catch(e){
-    console.error(e);
-    toast("فشل تسجيل الدخول", "bad");
-  }
+  // Local mode: "login" instantly
+  state.user.uid = "local";
+  state.user.displayName = state.user.displayName || "طالب سراج";
+  state.user.photoURL = "";
+  saveState();
+
+  document.querySelector("#authScreen").classList.add("hidden");
+  document.querySelector("#mainScreen").classList.remove("hidden");
+
+  if(!location.hash) location.hash = "#timer";
+  render();
 }
 
 async function logout(){
