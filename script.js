@@ -1,11 +1,11 @@
 /* =========================================================
-  Seraj — Static Web App (GitHub Pages) + Firebase + Three.js
-  كل صفحة: function renderX(view)
+  Seraj — Local-only (GitHub Pages Static)
+  - No Firebase
+  - Opens مباشرة بدون تسجيل دخول
+  - Routing عبر #hash
+  - Timer 3D Three.js + Coins
+  - Daily Goals lock + Plan heuristic
 ========================================================= */
-
-let FB = null;       // سيتم التقاطها بعد تحميل firebase.js
-let authedUser = null;
-let leaderboardUnsub = null;
 
 /* ---------------------------
   State (localStorage)
@@ -14,7 +14,7 @@ const LS_KEY = "seraj_state_v1";
 
 const DEFAULT_STATE = {
   version: 1,
-  user: { uid: null, displayName: "", photoURL: "" },
+  user: { uid: "local", displayName: "طالب سراج", photoURL: "" },
 
   coins: 0,
   totalMinutes: 0,
@@ -26,10 +26,8 @@ const DEFAULT_STATE = {
   },
 
   inventory: {
-    // free defaults:
     skin_basic: true,
-    bg_basic: true,
-    avatar_basic: true
+    bg_basic: true
   },
 
   daily: {
@@ -37,10 +35,10 @@ const DEFAULT_STATE = {
     locked: true,
     goals: null,     // { totalMinutes, startTime, subjects:[{name,pct}] }
     plan: [],        // generated sessions [{subject, minutes}]
-    sessionsToday: []// for stats today (optional)
+    sessionsToday: []// per minute earned today
   },
 
-  sessions: [], // global sessions: {tsISO, minutes, skin} per minute earned (min-granularity)
+  sessions: [], // global minutes log: {tsISO, minutes:1, skin}
 
   notebooks: {
     strengths: [],
@@ -51,7 +49,7 @@ const DEFAULT_STATE = {
   longPlan: {
     rangeDays: 30,
     hero: "سوي خطتك بنفسك — هذا طريقك الخاص",
-    days: [] // [{date, items:[{subject, task, done}]}]
+    days: [] // [{date, items:[{subject, task, done, id}]}]
   },
 
   avatar: {
@@ -78,6 +76,7 @@ let state = loadState();
 const $ = (q, el=document) => el.querySelector(q);
 const $$ = (q, el=document) => [...el.querySelectorAll(q)];
 const nowISO = () => new Date().toISOString();
+function clamp(n,a,b){ return Math.max(a, Math.min(b,n)); }
 
 function todayKey(){
   const d = new Date();
@@ -85,22 +84,6 @@ function todayKey(){
   const m = String(d.getMonth()+1).padStart(2,'0');
   const da = String(d.getDate()).padStart(2,'0');
   return `${y}-${m}-${da}`;
-}
-
-function saveState(){
-  localStorage.setItem(LS_KEY, JSON.stringify(state));
-  paintShell();
-}
-
-function loadState(){
-  try{
-    const raw = localStorage.getItem(LS_KEY);
-    if(!raw) return structuredClone(DEFAULT_STATE);
-    const parsed = JSON.parse(raw);
-    return deepMerge(structuredClone(DEFAULT_STATE), parsed);
-  }catch{
-    return structuredClone(DEFAULT_STATE);
-  }
 }
 
 function deepMerge(base, extra){
@@ -114,9 +97,33 @@ function deepMerge(base, extra){
   return base;
 }
 
+function loadState(){
+  try{
+    const raw = localStorage.getItem(LS_KEY);
+    if(!raw) return structuredClone(DEFAULT_STATE);
+    const parsed = JSON.parse(raw);
+    return deepMerge(structuredClone(DEFAULT_STATE), parsed);
+  }catch{
+    return structuredClone(DEFAULT_STATE);
+  }
+}
+
+function saveState(){
+  localStorage.setItem(LS_KEY, JSON.stringify(state));
+  paintShell();
+}
+
+function escapeHtml(str){
+  return String(str||"")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
+
 function toast(msg, type="info"){
   const t = document.createElement("div");
-  t.className = "toast";
   t.textContent = msg;
   Object.assign(t.style, {
     position:"fixed", inset:"auto 14px 14px 14px",
@@ -137,8 +144,6 @@ function fmtTime(sec){
   return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
 }
 
-function clamp(n,a,b){ return Math.max(a, Math.min(b,n)); }
-
 /* ---------------------------
   Daily reset + lock
 ---------------------------- */
@@ -150,7 +155,6 @@ function dailyResetIfNeeded(){
     state.daily.goals = null;
     state.daily.plan = [];
     state.daily.sessionsToday = [];
-    // reset timer carry for cleanliness
     state.timer.running = false;
     state.timer.carrySeconds = 0;
     state.timer.lastTick = 0;
@@ -159,57 +163,7 @@ function dailyResetIfNeeded(){
 }
 
 /* ---------------------------
-  Firebase wiring (dynamic import from firebase.js module)
----------------------------- */
-async function initFirebase(){
-  try{
-    // firebase.js is type="module" already loaded by browser.
-    // We import it again to access exports safely.
-    const mod = await import("./firebase.js");
-    FB = mod;
-  }catch(e){
-    console.error(e);
-    toast("تعذر تحميل Firebase.js — تأكد من رفع الملف", "bad");
-/* ---------------------------
-  Local-only mode (NO Firebase)
----------------------------- */
-
-// إذا بدك تلغي Firebase نهائيًا، خلّي كل دوال Firebase فاضية عشان ما ينكسر الكود.
-
-async function initFirebase(){ /* local only */ }
-
-async function googleLogin(){
-  // Local mode: open instantly (لو لسه عندك زر)
-  state.user.uid = "local";
-  state.user.displayName = state.user.displayName || "طالب سراج";
-  state.user.photoURL = "";
-  saveState();
-
-  const a = document.querySelector("#authScreen");
-  const m = document.querySelector("#mainScreen");
-  if(a) a.classList.add("hidden");
-  if(m) m.classList.remove("hidden");
-
-  if(!location.hash) location.hash = "#timer";
-  render();
-}
-
-async function logout(){
-  // Local mode: optional
-  const a = document.querySelector("#authScreen");
-  const m = document.querySelector("#mainScreen");
-  if(a) a.classList.remove("hidden");
-  if(m) m.classList.add("hidden");
-  location.hash = "";
-}
-async function ensureUserDoc(user){ /* local only */ }
-async function pullUserDoc(user){ /* local only */ }
-
-function syncUserThrottled(){ /* local only */ }
-async function pushUserDoc(){ /* local only */ }
-
-/* ---------------------------
-  App shell paint
+  UI shell paint
 ---------------------------- */
 function setActiveNav(){
   const hash = location.hash || "#timer";
@@ -219,28 +173,32 @@ function setActiveNav(){
 }
 
 function paintShell(){
-  // coins + total + lock pill + mini avatar
-  $("#coinBadge").textContent = `${state.coins} SC`;
-  $("#totalMinPill").textContent = `${state.totalMinutes}`;
+  const coin = $("#coinBadge");
+  if(coin) coin.textContent = `${state.coins} SC`;
+
+  const total = $("#totalMinPill");
+  if(total) total.textContent = `${state.totalMinutes}`;
 
   const locked = state.daily.locked;
-  $("#dailyLockPill").textContent = locked ? "🔒 لازم تدخل أهداف اليوم" : "✅ أهداف اليوم جاهزة";
-  $("#dailyLockPill").style.borderColor = locked ? "rgba(255,204,102,.55)" : "rgba(54,211,153,.55)";
+  const pill = $("#dailyLockPill");
+  if(pill){
+    pill.textContent = locked ? "🔒 لازم تدخل أهداف اليوم" : "✅ أهداف اليوم جاهزة";
+    pill.style.borderColor = locked ? "rgba(255,204,102,.55)" : "rgba(54,211,153,.55)";
+  }
 
-  // mini avatar
-  const av = $("#miniAvatar");
-  av.innerHTML = state.avatar.svg ? state.avatar.svg : `<span class="small">🙂</span>`;
+  const miniAvatar = $("#miniAvatar");
+  if(miniAvatar){
+    miniAvatar.innerHTML = state.avatar.svg ? state.avatar.svg : `<span class="small">🙂</span>`;
+  }
 
-  // user name
-  $("#userName").textContent = state.user.displayName || "—";
+  const userName = $("#userName");
+  if(userName) userName.textContent = state.user.displayName || "طالب سراج";
 }
 
 function setBackgroundTheme(){
   const bg = state.equipped.bgTheme;
-  // Simple body overlay by adding a data attribute:
   document.body.dataset.bg = bg;
 
-  // Lightweight theme tint
   const root = document.documentElement;
   if(bg==="bg_fire"){
     root.style.setProperty("--pri", "#ff7a66");
@@ -273,11 +231,12 @@ function setTitle(hash){
     "#stats":"📊 الإحصائيات",
     "#notebooks":"📒 الدفاتر",
     "#plan":"🗓️ خطة طويلة",
-    "#leaderboard":"🏆 المتصدرين",
+    "#leaderboard":"🏆 المتصدرين (محلي)",
     "#settings":"⚙️ الإعدادات",
     "#profile":"🧑‍🎨 البروفايل/أفاتار"
   };
-  $("#pageTitle").textContent = map[hash] || "—";
+  const t = $("#pageTitle");
+  if(t) t.textContent = map[hash] || "—";
 }
 
 function render(){
@@ -293,9 +252,9 @@ function render(){
   setTitle(hash);
 
   const view = $("#view");
+  if(!view) return;
   view.innerHTML = "";
-  stopLeaderboard();
-  // ensure timer keeps ticking regardless view; but stop 3d when leaving
+
   if(hash !== "#timer") destroyTimer3D();
 
   const page = ({
@@ -306,7 +265,7 @@ function render(){
     "#stats": renderStats,
     "#notebooks": renderNotebooks,
     "#plan": renderPlan,
-    "#leaderboard": renderLeaderboard,
+    "#leaderboard": renderLeaderboardLocal,
     "#settings": renderSettings,
     "#profile": renderProfile
   })[hash] || renderTimer;
@@ -324,11 +283,11 @@ let T = {
   raf:0,
   dragging:false,
   lastX:0,lastY:0,
-  rotY:0, rotX:0
+  rotY:0, rotX:0,
+  _ro:null
 };
 
 function skinDef(id){
-  // Skin colors (simple, fast) — Jordan uses multi-color ring texture.
   const defs = {
     skin_basic: { name:"Basic", base:0x6aa8ff, glow:0x6aa8ff },
     skin_fire:  { name:"Fire",  base:0xff6b6b, glow:0xffcc66 },
@@ -342,16 +301,10 @@ function makeJordanTexture(){
   const c = document.createElement("canvas");
   c.width = 512; c.height = 64;
   const g = c.getContext("2d");
-
-  // Jordan-like bands: black/white/green + red triangle hint
   g.fillStyle = "#000"; g.fillRect(0,0,512,22);
   g.fillStyle = "#fff"; g.fillRect(0,22,512,20);
   g.fillStyle = "#007a3d"; g.fillRect(0,42,512,22);
-
-  // Red accent stripe
-  g.fillStyle = "#ce1126";
-  g.fillRect(0,0,120,64);
-
+  g.fillStyle = "#ce1126"; g.fillRect(0,0,120,64);
   const tex = new THREE.CanvasTexture(c);
   tex.wrapS = THREE.RepeatWrapping;
   tex.repeat.x = 2;
@@ -359,6 +312,11 @@ function makeJordanTexture(){
 }
 
 function initTimer3D(container){
+  if(!window.THREE){
+    container.innerHTML = `<div style="padding:16px;color:var(--muted)">Three.js غير محمّل. تأكد إنك ضايفه في index.html</div>`;
+    return;
+  }
+
   const canvas = document.createElement("canvas");
   canvas.id = "timerCanvas";
   container.appendChild(canvas);
@@ -375,19 +333,16 @@ function initTimer3D(container){
   const camera = new THREE.PerspectiveCamera(45, w/h, 0.1, 100);
   camera.position.set(0, 0.6, 3.2);
 
-  // Lights
   const amb = new THREE.AmbientLight(0xffffff, 0.75);
   scene.add(amb);
   const dir = new THREE.DirectionalLight(0xffffff, 0.9);
   dir.position.set(2,2,3);
   scene.add(dir);
 
-  // Ring
   const skin = skinDef(state.equipped.timerSkin);
 
   const geo = new THREE.TorusGeometry(1, 0.18, 32, 160);
   let mat;
-
   if(skin.jordan){
     const tex = makeJordanTexture();
     mat = new THREE.MeshStandardMaterial({
@@ -411,7 +366,6 @@ function initTimer3D(container){
   ring.rotation.x = 0.7;
   scene.add(ring);
 
-  // Glow shell (additive)
   const glowGeo = new THREE.TorusGeometry(1, 0.24, 16, 120);
   const glowMat = new THREE.MeshBasicMaterial({
     color: skin.glow,
@@ -424,7 +378,6 @@ function initTimer3D(container){
   glow.rotation.copy(ring.rotation);
   scene.add(glow);
 
-  // Sparks (simple points)
   const sparkCount = 260;
   const positions = new Float32Array(sparkCount*3);
   for(let i=0;i<sparkCount;i++){
@@ -447,7 +400,6 @@ function initTimer3D(container){
   const sparks = new THREE.Points(sparkGeo, sparkMat);
   scene.add(sparks);
 
-  // Store
   T.renderer = renderer;
   T.scene = scene;
   T.camera = camera;
@@ -456,10 +408,7 @@ function initTimer3D(container){
   T.sparks = sparks;
   T.canvas = canvas;
 
-  // Drag/Touch controls (lightweight)
-  const onDown = (x,y)=>{
-    T.dragging = true; T.lastX=x; T.lastY=y;
-  };
+  const onDown = (x,y)=>{ T.dragging=true; T.lastX=x; T.lastY=y; };
   const onMove = (x,y)=>{
     if(!T.dragging) return;
     const dx = (x - T.lastX);
@@ -485,7 +434,6 @@ function initTimer3D(container){
   }, {passive:true});
   canvas.addEventListener("touchend", onUp, {passive:true});
 
-  // Resize
   const ro = new ResizeObserver(()=>{
     if(!T.renderer) return;
     const W = container.clientWidth;
@@ -497,9 +445,7 @@ function initTimer3D(container){
   ro.observe(container);
   T._ro = ro;
 
-  // Animate
   const tick = (tms)=>{
-    // ambient motion
     const t = tms * 0.001;
     ring.rotation.y = T.rotY + Math.sin(t*0.7)*0.15;
     ring.rotation.x = 0.7 + T.rotX + Math.sin(t*0.9)*0.05;
@@ -508,11 +454,10 @@ function initTimer3D(container){
     sparks.rotation.y = -t*0.3;
     sparks.rotation.x = Math.sin(t*0.2)*0.08;
 
-    // subtle pulse while running
     const running = state.timer.running;
     glow.material.opacity = running ? 0.22 + Math.sin(t*6)*0.03 : 0.16 + Math.sin(t*2)*0.02;
 
-    T.renderer.render(scene, camera);
+    renderer.render(scene, camera);
     T.raf = requestAnimationFrame(tick);
   };
   T.raf = requestAnimationFrame(tick);
@@ -522,9 +467,8 @@ function destroyTimer3D(){
   if(!T.renderer) return;
   cancelAnimationFrame(T.raf);
   try{ T._ro?.disconnect(); }catch{}
-  T.renderer.dispose();
-  // Clear references
-  T = { renderer:null, scene:null, camera:null, ring:null, glow:null, sparks:null, canvas:null, raf:0, dragging:false, lastX:0,lastY:0, rotY:0, rotX:0 };
+  try{ T.renderer.dispose(); }catch{}
+  T = { renderer:null, scene:null, camera:null, ring:null, glow:null, sparks:null, canvas:null, raf:0, dragging:false, lastX:0,lastY:0, rotY:0, rotX:0, _ro:null };
 }
 
 /* ---------------------------
@@ -536,21 +480,20 @@ setInterval(()=>{
   if(!state.timer.lastTick) state.timer.lastTick = now;
   const deltaSec = Math.floor((now - state.timer.lastTick)/1000);
   if(deltaSec <= 0) return;
+
   state.timer.lastTick = now;
   state.timer.carrySeconds += deltaSec;
 
-  // consume minutes
   while(state.timer.carrySeconds >= 60){
     state.timer.carrySeconds -= 60;
     earnOneMinute();
   }
+
   saveState();
-  // update HUD on timer view if exists
+
   const secLeft = 60 - state.timer.carrySeconds;
   const hud = $("#timerSecLeft");
   if(hud) hud.textContent = `${secLeft}s`;
-  const tsec = $("#timerRunSec");
-  if(tsec) tsec.textContent = fmtTime(state.timer.carrySeconds);
 }, 1000);
 
 function earnOneMinute(){
@@ -565,29 +508,23 @@ function earnOneMinute(){
   state.history.unshift({ ts: nowISO(), delta: +1, reason: "دقيقة مكتملة (Timer)" });
   state.history = state.history.slice(0, 80);
 
-  // UI coin animation
   const pop = $("#coinPop");
   if(pop){
     pop.textContent = "+1 SC";
     pop.classList.add("show");
     setTimeout(()=> pop.classList.remove("show"), 350);
   }
-
-  syncUserThrottled();
 }
 
 /* =========================================================
   Pages
 ========================================================= */
-
 function renderTimer(view){
   const wrap = document.createElement("div");
   wrap.className = "grid two";
 
-  // Left: Timer card
   const left = document.createElement("div");
   left.className = "card";
-
   left.innerHTML = `
     <h3 class="h">تايمر 3D — اسحب ولف</h3>
     <p class="p">كل دقيقة مكتملة = <b>1 Seraj Coin</b>. اختر Skin من المتجر/الإعدادات.</p>
@@ -595,7 +532,7 @@ function renderTimer(view){
     <div class="timerWrap" id="timerWrap">
       <div class="timerHUD">
         <div class="hudBox">
-          <div class="timerBig" id="timerDisplay">${state.timer.running ? "RUN" : "READY"}</div>
+          <div class="timerBig">${state.timer.running ? "RUN" : "READY"}</div>
           <div class="timerSmall">ثواني للـ +1: <span id="timerSecLeft">${60 - state.timer.carrySeconds}s</span></div>
         </div>
         <div class="hudBox">
@@ -615,7 +552,6 @@ function renderTimer(view){
     </div>
   `;
 
-  // Right: Quick panel
   const right = document.createElement("div");
   right.className = "card";
   right.innerHTML = `
@@ -635,9 +571,7 @@ function renderTimer(view){
       </div>
     </div>
     <div class="sep"></div>
-    <div class="p">
-      نصيحة سريعة: ابدأ بجلسة 25–45 دقيقة، وبعدها استراحة 5–10 دقائق. المهم الاستمرارية.
-    </div>
+    <div class="p">ابدأ بجلسة 25–45 دقيقة، وبعدها استراحة 5–10 دقائق. المهم الاستمرارية.</div>
     <div class="row">
       <a class="btn" href="#goals">تعديل أهداف اليوم</a>
       <a class="btn" href="#store">فتح المتجر</a>
@@ -648,11 +582,9 @@ function renderTimer(view){
   wrap.appendChild(right);
   view.appendChild(wrap);
 
-  // Init 3D
   const timerWrap = $("#timerWrap");
   initTimer3D(timerWrap);
 
-  // Wire controls
   $("#btnStartStop").onclick = ()=>{
     if(!state.daily.goals){
       toast("لازم تدخل أهداف اليوم أولاً", "bad");
@@ -660,12 +592,7 @@ function renderTimer(view){
       return;
     }
     state.timer.running = !state.timer.running;
-    if(state.timer.running){
-      state.timer.lastTick = Date.now();
-      toast("ابدأ 🔥", "good");
-    }else{
-      toast("توقف ⏸️");
-    }
+    if(state.timer.running) state.timer.lastTick = Date.now();
     saveState();
     render();
   };
@@ -687,10 +614,7 @@ function renderGoals(view){
 
   card.innerHTML = `
     <h3 class="h">أهداف اليوم (إلزامي)</h3>
-    <p class="p">
-      لازم تدخل أهدافك أول مرة كل يوم. بعدها ينفتح كل شيء.
-      <br><span class="badge">مجموع النسب لازم = 100%</span>
-    </p>
+    <p class="p">لازم تدخل أهدافك أول مرة كل يوم. بعدها ينفتح كل شيء. <span class="badge">مجموع النسب = 100%</span></p>
 
     <div class="grid two">
       <div>
@@ -704,7 +628,6 @@ function renderGoals(view){
     </div>
 
     <div class="sep"></div>
-
     <div id="subjectsBox"></div>
 
     <div class="row" style="margin-top:12px">
@@ -713,16 +636,12 @@ function renderGoals(view){
     </div>
 
     <div class="sep"></div>
-    <div>
-      <h3 class="h">الخطة المقترحة (Heuristic محلي)</h3>
-      <div id="planBox" class="list"></div>
-      <p class="small">قواعد: 25–55 دقيقة للجلسة، منع 3 جلسات متتالية لنفس المادة، وبقايا أقل من 25 تُدمج.</p>
-    </div>
+    <h3 class="h">الخطة المقترحة</h3>
+    <div id="planBox" class="list"></div>
+    <p class="small">قواعد: 25–55 دقيقة للجلسة، منع 3 جلسات متتالية لنفس المادة، وبقايا أقل من 25 تُدمج.</p>
   `;
-
   view.appendChild(card);
 
-  // subjects editor
   const subj = goals?.subjects || [
     { name:"رياضيات", pct:40 },
     { name:"عربي", pct:25 },
@@ -753,7 +672,6 @@ function renderGoals(view){
       <div class="small" id="pctSum">—</div>
     `;
 
-    // events
     $$("[data-sub-name]").forEach(inp=>{
       inp.oninput = ()=>{ subj[inp.dataset.subName].name = inp.value.trim(); updateSum(); };
     });
@@ -777,8 +695,6 @@ function renderGoals(view){
     el.style.color = (sum===100) ? "var(--good)" : "var(--warn)";
   }
 
-  renderSubjects();
-
   $("#btnAddSub").onclick = ()=>{
     subj.push({ name:`مادة ${subj.length+1}`, pct:0 });
     renderSubjects();
@@ -788,33 +704,25 @@ function renderGoals(view){
     const totalH = Number($("#gTotalH").value || 0);
     const totalMinutes = Math.round(totalH * 60);
     const startTime = $("#gStart").value || "";
-
     const sum = subj.reduce((a,b)=>a+Number(b.pct||0),0);
+
     if(totalMinutes <= 0){ toast("أدخل وقت صحيح", "bad"); return; }
     if(sum !== 100){ toast("مجموع النسب لازم يكون 100%", "bad"); return; }
     if(subj.some(s=>!s.name.trim())){ toast("في مادة اسمها فاضي", "bad"); return; }
 
     state.daily.goals = { totalMinutes, startTime, subjects: subj.map(s=>({name:s.name.trim(), pct:Number(s.pct)})) };
-
-    // Generate plan
     state.daily.plan = generateStudyPlan(state.daily.goals);
     state.daily.locked = false;
 
     saveState();
-    syncUserThrottled();
     toast("تم حفظ أهداف اليوم ✅", "good");
-    renderPlanBox();
-    render(); // refresh nav lock
+    render();
   };
 
   function renderPlanBox(){
     const pb = $("#planBox");
     const plan = state.daily.plan || [];
-    if(!plan.length){
-      pb.innerHTML = `<div class="small">لا توجد خطة بعد. اضغط حفظ لتوليدها.</div>`;
-      return;
-    }
-    pb.innerHTML = plan.map((p,idx)=>`
+    pb.innerHTML = plan.length ? plan.map((p,idx)=>`
       <div class="item">
         <div class="row" style="justify-content:space-between">
           <div>
@@ -824,18 +732,14 @@ function renderGoals(view){
           <span class="badge">${p.minutes}m</span>
         </div>
       </div>
-    `).join("");
+    `).join("") : `<div class="small">لا توجد خطة بعد. اضغط حفظ لتوليدها.</div>`;
   }
 
+  renderSubjects();
   renderPlanBox();
 }
 
 function generateStudyPlan(goals){
-  // Heuristic:
-  // - chunk minutes in [25..55]
-  // - momentum: start with highest pct
-  // - no 3 consecutive same subject
-  // - merge remainder < 25 into prior session if possible
   const MIN = 25, MAX = 55;
 
   const subjects = goals.subjects
@@ -849,14 +753,12 @@ function generateStudyPlan(goals){
   let last = null, last2 = null;
 
   function pickNext(){
-    // pick highest left but avoid 3-in-a-row
     const sorted = [...subjects].sort((a,b)=>b.left-a.left);
     for(const s of sorted){
       if(s.left <= 0) continue;
       if(last && last2 && last===s.name && last2===s.name) continue;
       return s;
     }
-    // if all blocked, return first with left
     return sorted.find(x=>x.left>0) || null;
   }
 
@@ -864,17 +766,14 @@ function generateStudyPlan(goals){
     const s = pickNext();
     if(!s) break;
 
-    // decide chunk
     let chunk = clamp(s.left, MIN, MAX);
 
-    // if left is small (<MIN) try merge into previous same subject
     if(s.left < MIN){
       const prev = [...plan].reverse().find(x=>x.subject===s.name);
       if(prev && prev.minutes + s.left <= MAX){
         prev.minutes += s.left;
         s.left = 0;
       }else{
-        // allow one quick review exception (15-20) at end
         chunk = clamp(s.left, 15, 20);
         plan.push({ subject:s.name, minutes:chunk, quick:true });
         s.left -= chunk;
@@ -886,12 +785,9 @@ function generateStudyPlan(goals){
 
     last2 = last;
     last = s.name;
-
-    // safety: prevent infinite loops
     if(plan.length > 60) break;
   }
 
-  // final cleanup: merge any tiny quick leftovers again
   for(const s of subjects){
     if(s.left>0){
       const prev = [...plan].reverse().find(x=>x.subject===s.name);
@@ -902,7 +798,6 @@ function generateStudyPlan(goals){
       }
     }
   }
-
   return plan;
 }
 
@@ -932,8 +827,7 @@ function renderProgress(view){
   const right = document.createElement("div");
   right.className = "card";
   right.innerHTML = `
-    <h3 class="h">خط إنجاز حي</h3>
-    <p class="p">هذا شريط بسيط يعتمد على دقائقك (اليوم/الأسبوع/الشهر).</p>
+    <h3 class="h">خط إنجاز</h3>
     <div class="item">
       <div class="itemTitle">اليوم</div>
       ${bar(today, (state.daily.goals?.totalMinutes||180))}
@@ -978,23 +872,16 @@ function bar(val, max){
 }
 
 /* ---------------------------
-  Store
+  Store (local)
 ---------------------------- */
 const STORE = [
-  // Timer skins
-  { id:"skin_fire",  slot:"timerSkin", name:"Timer Skin — Fire",  price:120, desc:"تأثير ناري + Glow" },
-  { id:"skin_water", slot:"timerSkin", name:"Timer Skin — Water", price:120, desc:"تأثير مائي + Glow" },
-  { id:"skin_jordan",slot:"timerSkin", name:"Timer Skin — Jordan",price:350, desc:"علم الأردن (الأغلى)" },
+  { id:"skin_fire",  slot:"timerSkin", name:"Timer Skin — Fire",  price:120, desc:"Glow ناري" },
+  { id:"skin_water", slot:"timerSkin", name:"Timer Skin — Water", price:120, desc:"Glow مائي" },
+  { id:"skin_jordan",slot:"timerSkin", name:"Timer Skin — Jordan",price:350, desc:"علم الأردن" },
 
-  // Background themes
   { id:"bg_fire",  slot:"bgTheme", name:"Background — Fire",  price:60,  desc:"خلفية دافئة" },
   { id:"bg_water", slot:"bgTheme", name:"Background — Water", price:60,  desc:"خلفية هادئة" },
-  { id:"bg_jordan",slot:"bgTheme", name:"Background — Jordan",price:140, desc:"خلفية وطنية" },
-
-  // Profile pictures / Avatars (as items)
-  { id:"avatar_jordanflag", slot:"avatarStyle", name:"Avatar Pack — Jordan Flag", price:80, desc:"ستايل وطن" },
-  { id:"avatar_petra",      slot:"avatarStyle", name:"Avatar Pack — Petra",       price:90, desc:"ستايل البترا" },
-  { id:"avatar_quotes",     slot:"avatarStyle", name:"Avatar Pack — Tawjihi Quotes", price:70, desc:"ستايل اقتباسات" }
+  { id:"bg_jordan",slot:"bgTheme", name:"Background — Jordan",price:140, desc:"خلفية وطنية" }
 ];
 
 function renderStore(view){
@@ -1004,17 +891,15 @@ function renderStore(view){
   const left = document.createElement("div");
   left.className = "card";
   left.innerHTML = `
-    <h3 class="h">المتجر (شراء بعملة Seraj Coin فقط)</h3>
-    <p class="p">
-      1 Coin لكل دقيقة. في يوم دراسة طبيعي تقدر تشتري أشياء بسيطة، والأشياء الكبيرة بدها وقت أكثر.
-    </p>
+    <h3 class="h">المتجر (Seraj Coin)</h3>
+    <p class="p">1 Coin لكل دقيقة. الأشياء الكبيرة بدها وقت أكثر.</p>
     <div class="grid" id="storeList"></div>
   `;
 
   const right = document.createElement("div");
   right.className = "card";
   right.innerHTML = `
-    <h3 class="h">مخزونك + تجهيز</h3>
+    <h3 class="h">مخزونك</h3>
     <div class="item">
       <div class="itemTitle">الرصيد</div>
       <div class="itemSub"><b>${state.coins} SC</b></div>
@@ -1025,8 +910,6 @@ function renderStore(view){
       <div class="itemSub">Timer Skin: <b>${state.equipped.timerSkin}</b></div>
       <div class="itemSub">Background: <b>${state.equipped.bgTheme}</b></div>
     </div>
-    <div class="sep"></div>
-    <div class="small">بعد تجهيز Timer Skin ارجع للتايمر لتشوف الشكل.</div>
   `;
 
   card.appendChild(left);
@@ -1058,12 +941,8 @@ function renderStore(view){
     `;
   }).join("");
 
-  $$("[data-buy]").forEach(b=>{
-    b.onclick = ()=> buyItem(b.dataset.buy);
-  });
-  $$("[data-eq]").forEach(b=>{
-    b.onclick = ()=> equipItem(b.dataset.eq);
-  });
+  $$("[data-buy]").forEach(b=> b.onclick = ()=> buyItem(b.dataset.buy));
+  $$("[data-eq]").forEach(b=> b.onclick = ()=> equipItem(b.dataset.eq));
 }
 
 function buyItem(id){
@@ -1078,7 +957,6 @@ function buyItem(id){
   state.history = state.history.slice(0, 80);
 
   saveState();
-  syncUserThrottled();
   toast("تم الشراء ✅", "good");
   render();
 }
@@ -1090,7 +968,6 @@ function equipItem(id){
 
   state.equipped[it.slot] = it.id;
   saveState();
-  syncUserThrottled();
   toast("تم التجهيز ✅", "good");
   render();
 }
@@ -1106,7 +983,6 @@ function renderStats(view){
   const week = minutesInLastDays(7);
   const month = minutesInLastDays(30);
   const total = state.totalMinutes;
-
   const badges = computeBadges(total);
 
   const left = document.createElement("div");
@@ -1125,8 +1001,7 @@ function renderStats(view){
   const right = document.createElement("div");
   right.className = "card";
   right.innerHTML = `
-    <h3 class="h">Badges (مكافآت)</h3>
-    <p class="p">على حسب إجمالي الدقائق — (حد أدنى 5 بادجات).</p>
+    <h3 class="h">Badges</h3>
     <div class="list">
       ${badges.map(b=>`
         <div class="item">
@@ -1154,13 +1029,12 @@ function computeBadges(totalMinutes){
     { at: 600,  icon:"🥇", name:"10 ساعات",   desc:"أنت جدي بالتوجيهي" },
     { at: 1200, icon:"🏅", name:"20 ساعة",    desc:"محرك قوي" },
     { at: 2400, icon:"🏆", name:"40 ساعة",    desc:"مستوى متقدم" },
-    { at: 3600, icon:"🔥", name:"60 ساعة",    desc:"أسطورة سراج" }
   ];
   return defs.map(d=>({ ...d, earned: totalMinutes >= d.at }));
 }
 
 /* ---------------------------
-  Avatar / Profile (SVG builder)
+  Avatar / Profile (SVG)
 ---------------------------- */
 function renderProfile(view){
   const card = document.createElement("div");
@@ -1169,28 +1043,17 @@ function renderProfile(view){
   const left = document.createElement("div");
   left.className = "card";
   left.innerHTML = `
-    <h3 class="h">Avatar (Bitmoji-like مبسط)</h3>
-    <p class="p">اختار أجزاء بسيطة، وبنحفظها محليًا + Firestore وتظهر بالـLeaderboard.</p>
-
+    <h3 class="h">Avatar مبسط</h3>
     <div class="grid two">
-      <div>
-        <label>لون البشرة</label>
-        <input id="avSkin" class="field" type="color" value="${state.avatar.parts.skin}">
-      </div>
-      <div>
-        <label>لون الشعر</label>
-        <input id="avHair" class="field" type="color" value="${state.avatar.parts.hair}">
-      </div>
+      <div><label>لون البشرة</label><input id="avSkin" class="field" type="color" value="${state.avatar.parts.skin}"></div>
+      <div><label>لون الشعر</label><input id="avHair" class="field" type="color" value="${state.avatar.parts.hair}"></div>
       <div>
         <label>نظارة</label>
         <select id="avGlasses" class="field">
           ${opt(state.avatar.parts.glasses, ["none","round","square"])}
         </select>
       </div>
-      <div>
-        <label>الملابس</label>
-        <input id="avClothes" class="field" type="color" value="${state.avatar.parts.clothes}">
-      </div>
+      <div><label>الملابس</label><input id="avClothes" class="field" type="color" value="${state.avatar.parts.clothes}"></div>
       <div>
         <label>التعبير</label>
         <select id="avFace" class="field">
@@ -1198,18 +1061,16 @@ function renderProfile(view){
         </select>
       </div>
     </div>
-
     <div class="row" style="margin-top:12px">
-      <button class="btn primary" id="btnSaveAvatar">حفظ الأفاتار</button>
+      <button class="btn primary" id="btnSaveAvatar">حفظ</button>
     </div>
   `;
 
   const right = document.createElement("div");
   right.className = "card";
   right.innerHTML = `
-    <h3 class="h">المعاينة</h3>
+    <h3 class="h">معاينة</h3>
     <div class="item" style="display:grid; place-items:center; min-height:260px" id="avatarPreview"></div>
-    <div class="small">هذا SVG خفيف وسريع.</div>
   `;
 
   card.appendChild(left);
@@ -1230,9 +1091,7 @@ function renderProfile(view){
     return {parts, svg};
   }
 
-  // initial
   rebuild();
-
   ["avSkin","avHair","avGlasses","avClothes","avFace"].forEach(id=>{
     $("#"+id).oninput = rebuild;
     $("#"+id).onchange = rebuild;
@@ -1243,28 +1102,23 @@ function renderProfile(view){
     state.avatar.parts = parts;
     state.avatar.svg = svg;
     saveState();
-    syncUserThrottled();
     toast("تم حفظ الأفاتار ✅", "good");
     paintShell();
   };
 }
 
 function buildAvatarSVG(parts){
-  // Simple SVG: head + hair + glasses + clothes + face
-  const glasses = parts.glasses;
-  const face = parts.face;
-
-  const mouth = face==="smile"
+  const mouth = parts.face==="smile"
     ? `<path d="M78 112 Q100 128 122 112" stroke="#2b2b2b" stroke-width="6" fill="none" stroke-linecap="round"/>`
-    : face==="happy"
+    : parts.face==="happy"
       ? `<path d="M76 110 Q100 140 124 110" stroke="#2b2b2b" stroke-width="6" fill="none" stroke-linecap="round"/>`
       : `<path d="M80 118 L120 118" stroke="#2b2b2b" stroke-width="6" stroke-linecap="round"/>`;
 
-  const g = glasses==="round"
+  const g = parts.glasses==="round"
     ? `<circle cx="78" cy="92" r="16" stroke="#111" stroke-width="6" fill="rgba(255,255,255,.2)"/>
        <circle cx="122" cy="92" r="16" stroke="#111" stroke-width="6" fill="rgba(255,255,255,.2)"/>
        <path d="M94 92 L106 92" stroke="#111" stroke-width="6" stroke-linecap="round"/>`
-    : glasses==="square"
+    : parts.glasses==="square"
       ? `<rect x="62" y="76" width="32" height="32" rx="8" stroke="#111" stroke-width="6" fill="rgba(255,255,255,.2)"/>
          <rect x="106" y="76" width="32" height="32" rx="8" stroke="#111" stroke-width="6" fill="rgba(255,255,255,.2)"/>
          <path d="M94 92 L106 92" stroke="#111" stroke-width="6" stroke-linecap="round"/>`
@@ -1299,10 +1153,8 @@ function opt(current, arr){
 function renderNotebooks(view){
   const card = document.createElement("div");
   card.className = "card";
-
   card.innerHTML = `
     <h3 class="h">الدفاتر</h3>
-    <p class="p">أقسام: نقاط قوة / نقاط ضعف / ملاحظات الدرس — مع بحث وإضافة/تعديل/حذف.</p>
 
     <div class="grid two">
       <div>
@@ -1332,12 +1184,7 @@ function renderNotebooks(view){
     <div class="sep"></div>
     <div id="nbList" class="list"></div>
   `;
-
   view.appendChild(card);
-
-  function typeLabel(t){
-    return t==="strengths" ? "نقاط قوة" : t==="weaknesses" ? "نقاط ضعف" : "ملاحظات الدرس";
-  }
 
   function getArr(){
     const t = $("#nbType").value;
@@ -1358,7 +1205,7 @@ function renderNotebooks(view){
         <div class="item">
           <div class="row" style="justify-content:space-between">
             <div style="flex:1">
-              <div class="itemTitle">${typeLabel(t)}</div>
+              <div class="itemTitle">${label(t)}</div>
               <div class="itemSub">${new Date(x.ts).toLocaleString("ar-JO")}</div>
               <div style="margin-top:6px">${escapeHtml(x.text)}</div>
             </div>
@@ -1407,6 +1254,10 @@ function renderNotebooks(view){
     renderList();
   };
 
+  function label(t){
+    return t==="strengths" ? "نقاط قوة" : t==="weaknesses" ? "نقاط ضعف" : "ملاحظات الدرس";
+  }
+
   renderList();
 }
 
@@ -1416,7 +1267,6 @@ function renderNotebooks(view){
 function renderPlan(view){
   const card = document.createElement("div");
   card.className = "card";
-
   card.innerHTML = `
     <h3 class="h">خطة طويلة</h3>
     <p class="p"><b>${escapeHtml(state.longPlan.hero)}</b></p>
@@ -1437,7 +1287,7 @@ function renderPlan(view){
 
     <div class="grid two">
       <div>
-        <label>تاريخ اليوم في الخطة</label>
+        <label>تاريخ</label>
         <input id="lpDate" class="field" type="date" value="${todayKey()}">
       </div>
       <div>
@@ -1555,12 +1405,16 @@ function renderPlan(view){
   renderPlanList();
 }
 
-function renderLeaderboard(view){
+/* ---------------------------
+  Leaderboard (Local)
+---------------------------- */
+function renderLeaderboardLocal(view){
   const card = document.createElement("div");
   card.className = "card";
   card.innerHTML = `
     <h3 class="h">🏆 المتصدرين (محلي)</h3>
-    <p class="p">بدون تسجيل دخول/فايربيس: هذا يعرض بيانات جهازك فقط.</p>
+    <p class="p">بدون Firebase: يعرض بيانات جهازك فقط.</p>
+
     <div class="list">
       <div class="item">
         <div class="row" style="justify-content:space-between">
@@ -1580,69 +1434,27 @@ function renderLeaderboard(view){
   view.appendChild(card);
 }
 
-  const { fb, db } = FB;
-  const q = fb.query(
-    fb.collection(db, "users"),
-    fb.orderBy("totalMinutes", "desc"),
-    fb.limit(10)
-  );
-
-  leaderboardUnsub = fb.onSnapshot(q, (snap)=>{
-    const rows = snap.docs.map((d,i)=>({ rank:i+1, ...d.data() }));
-    box.innerHTML = rows.length ? rows.map(r=>`
-      <div class="item">
-        <div class="row" style="justify-content:space-between">
-          <div class="row" style="gap:12px">
-            <span class="badge">#${r.rank}</span>
-            <div class="avatarCircle" style="width:38px;height:38px">${r.avatar?.svg || "🙂"}</div>
-            <div>
-              <div class="itemTitle">${escapeHtml(r.displayName || "طالب")}</div>
-              <div class="itemSub">${r.totalMinutes || 0} دقيقة</div>
-            </div>
-          </div>
-          <span class="badge">${(r.coins||0)} SC</span>
-        </div>
-      </div>
-    `).join("") : `<div class="small">لا يوجد بيانات بعد.</div>`;
-  }, (err)=>{
-    console.error(err);
-    box.innerHTML = `<div class="small">تعذر تحميل المتصدرين (تحقق من Firestore rules).</div>`;
-  });
-}
-
-function stopLeaderboard(){
-  try{ leaderboardUnsub?.(); }catch{}
-  leaderboardUnsub = null;
-}
-
 /* ---------------------------
   Settings
 ---------------------------- */
 function renderSettings(view){
   const card = document.createElement("div");
   card.className = "card";
-
   card.innerHTML = `
     <h3 class="h">الإعدادات</h3>
 
     <div class="grid two">
       <div>
         <label>Timer Skin</label>
-        <select id="setSkin" class="field">
-          ${ownedOptions("timerSkin")}
-        </select>
+        <select id="setSkin" class="field">${ownedOptions("timerSkin")}</select>
       </div>
       <div>
         <label>Background</label>
-        <select id="setBg" class="field">
-          ${ownedOptions("bgTheme")}
-        </select>
+        <select id="setBg" class="field">${ownedOptions("bgTheme")}</select>
       </div>
       <div>
         <label>الصوت</label>
-        <select id="setSound" class="field">
-          ${opt(String(state.settings.sound), ["true","false"])}
-        </select>
+        <select id="setSound" class="field">${opt(String(state.settings.sound), ["true","false"])}</select>
       </div>
     </div>
 
@@ -1650,25 +1462,19 @@ function renderSettings(view){
 
     <div class="row">
       <button class="btn" id="resetDaily">Reset بيانات اليوم (Goals + Sessions)</button>
-      <button class="btn ghost" id="pushNow">مزامنة الآن</button>
+      <button class="btn ghost" id="resetAll">مسح كل البيانات (Reset كامل)</button>
     </div>
-
-    <p class="small" style="margin-top:10px">
-      Reset اليوم لا يمسّ إجمالي الدقائق أو عملاتك (بس بيانات اليوم والخطة).
-    </p>
   `;
   view.appendChild(card);
 
   $("#setSkin").onchange = ()=>{
     state.equipped.timerSkin = $("#setSkin").value;
     saveState();
-    syncUserThrottled();
     toast("تم تغيير Skin ✅", "good");
   };
   $("#setBg").onchange = ()=>{
     state.equipped.bgTheme = $("#setBg").value;
     saveState();
-    syncUserThrottled();
     setBackgroundTheme();
     toast("تم تغيير الخلفية ✅", "good");
   };
@@ -1683,7 +1489,6 @@ function renderSettings(view){
     state.daily.plan = [];
     state.daily.sessionsToday = [];
     state.daily.locked = true;
-    // stop timer too
     state.timer.running = false;
     state.timer.carrySeconds = 0;
     state.timer.lastTick = 0;
@@ -1692,18 +1497,17 @@ function renderSettings(view){
     location.hash = "#goals";
   };
 
-  $("#pushNow").onclick = async ()=>{
-    await pushUserDoc();
-    toast("تمت المزامنة ✅", "good");
+  $("#resetAll").onclick = ()=>{
+    if(confirm("متأكد بدك تمسح كل بيانات سراج على هذا الجهاز؟")){
+      localStorage.removeItem(LS_KEY);
+      location.reload();
+    }
   };
 }
 
 function ownedOptions(slot){
-  // slot: timerSkin/bgTheme
   const ownedIds = Object.keys(state.inventory||{}).filter(id=>state.inventory[id]);
   const items = [];
-
-  // include basic
   if(slot==="timerSkin"){
     items.push({id:"skin_basic", label:"Basic (مجاني)"});
     if(ownedIds.includes("skin_fire")) items.push({id:"skin_fire", label:"Fire"});
@@ -1715,13 +1519,12 @@ function ownedOptions(slot){
     if(ownedIds.includes("bg_water")) items.push({id:"bg_water", label:"Water"});
     if(ownedIds.includes("bg_jordan")) items.push({id:"bg_jordan", label:"Jordan"});
   }
-
   return items.map(x=>`<option value="${x.id}" ${state.equipped[slot]===x.id?"selected":""}>${x.label}</option>`).join("");
 }
 
-/* =========================================================
-  Metrics helpers
-========================================================= */
+/* ---------------------------
+  Metrics
+---------------------------- */
 function minutesToday(){
   const t = todayKey();
   return (state.sessions||[]).filter(s=> (s.tsISO||"").slice(0,10)===t).length;
@@ -1735,38 +1538,31 @@ function minutesInLastDays(days){
   }).length;
 }
 
-function escapeHtml(str){
-  return String(str||"")
-    .replaceAll("&","&amp;")
-    .replaceAll("<","&lt;")
-    .replaceAll(">","&gt;")
-    .replaceAll('"',"&quot;")
-    .replaceAll("'","&#039;");
-}
-
-(async function boot(){
+/* =========================================================
+  Boot (opens مباشرة)
+========================================================= */
+(function boot(){
   dailyResetIfNeeded();
 
-  // اسم افتراضي محلي
-  state.user.uid = "local";
-  state.user.displayName = state.user.displayName || "طالب سراج";
-  state.user.photoURL = "";
+  // تأكد إنك داخل main مباشرة
+  const auth = $("#authScreen");
+  const main = $("#mainScreen");
+  if(auth) auth.classList.add("hidden");
+  if(main) main.classList.remove("hidden");
 
-  // زر logout يصير "إعادة ضبط التطبيق" (اختياري)
-  const btnLogout = document.querySelector("#btnLogout");
+  // زر logout نخليه Reset اختياري
+  const btnLogout = $("#btnLogout");
   if(btnLogout){
     btnLogout.textContent = "إعادة ضبط";
     btnLogout.onclick = ()=>{
-      if(confirm("بدك تمسح بيانات سراج على هذا الجهاز؟")){
-        localStorage.removeItem("seraj_state_v1");
+      if(confirm("تمسح بيانات سراج على هذا الجهاز؟")){
+        localStorage.removeItem(LS_KEY);
         location.reload();
       }
     };
   }
 
   paintShell();
-
-  // افتح مباشرة على التايمر
   if(!location.hash) location.hash = "#timer";
   render();
 
