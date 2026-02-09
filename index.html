@@ -6,38 +6,59 @@
   <meta name="theme-color" content="#0b1220" />
   <title>Seraj — سراج</title>
 
-  <!-- منع خطأ favicon -->
   <link rel="icon" href="data:,">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+  <!-- خط عربي جميل (اختياري) -->
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="style.css" />
 </head>
 
 <body>
-  <!-- خلفية -->
-  <div class="bg" aria-hidden="true"></div>
+  <!-- خلفية متحركة -->
+  <div class="bg" aria-hidden="true">
+    <div class="grain" aria-hidden="true"></div>
+    <div class="blobs" aria-hidden="true">
+      <span class="blob b1"></span>
+      <span class="blob b2"></span>
+      <span class="blob b3"></span>
+      <span class="blob b4"></span>
+    </div>
+  </div>
 
   <!-- Topbar -->
   <header class="topbar">
     <div class="brand">
-      <div class="logo">س</div>
-      <div>
+      <div class="logoWrap">
+        <div class="logo">س</div>
+        <div class="logoRing" aria-hidden="true"></div>
+      </div>
+      <div class="brandText">
         <div class="brandTitle">سراج</div>
         <div class="brandSub">رفيق التوجيهي — Timer + أهداف + متجر + دفاتر</div>
       </div>
     </div>
 
     <div class="topPills">
-      <div class="pill" id="dailyLockPill">—</div>
+      <div class="pill pillWarn" id="dailyLockPill">—</div>
+
       <div class="pill">
         <span class="muted">الرصيد</span>
         <b id="coinBadge">0 SC</b>
       </div>
+
       <div class="pill">
         <span class="muted">الإجمالي</span>
         <b><span id="totalMinPill">0</span> دقيقة</b>
       </div>
 
-      <div class="userMini">
+      <button class="pill pillBtn" id="btnQuickStart" title="ابدأ 25 دقيقة">
+        ⚡ بدء سريع
+      </button>
+
+      <div class="userMini" id="userMiniBtn" role="button" tabindex="0" title="الملف الشخصي">
         <div class="miniAvatar" id="miniAvatar">🙂</div>
         <div class="miniName" id="userName">طالب سراج</div>
       </div>
@@ -53,16 +74,36 @@
       </div>
 
       <nav class="nav">
-        <a class="navItem" data-route href="#timer">⏱️ Timer 3D</a>
-        <a class="navItem" data-route href="#goals">✅ Daily Goals</a>
-        <a class="navItem" data-route href="#progress">🪙 Progress</a>
-        <a class="navItem" data-route href="#store">🛒 Store</a>
-        <a class="navItem" data-route href="#stats">📊 Statistics</a>
-        <a class="navItem" data-route href="#notebooks">📒 Notebooks</a>
-        <a class="navItem" data-route href="#plan">🗓️ Long-term Plan</a>
-        <a class="navItem" data-route href="#leaderboard">🏆 Leaderboard</a>
-        <a class="navItem" data-route href="#settings">⚙️ Settings</a>
-        <a class="navItem" data-route href="#profile">🧑‍🎨 Profile / Avatar</a>
+        <a class="navItem" data-route href="#timer">
+          <span class="ni">⏱️</span><span>Timer 3D</span><span class="chip">Pomodoro</span>
+        </a>
+        <a class="navItem" data-route href="#goals">
+          <span class="ni">✅</span><span>Daily Goals</span><span class="chip chipOk">Lock</span>
+        </a>
+        <a class="navItem" data-route href="#progress">
+          <span class="ni">🪙</span><span>Progress</span><span class="chip">SC</span>
+        </a>
+        <a class="navItem" data-route href="#store">
+          <span class="ni">🛒</span><span>Store</span><span class="chip">Rewards</span>
+        </a>
+        <a class="navItem" data-route href="#stats">
+          <span class="ni">📊</span><span>Statistics</span><span class="chip">Charts</span>
+        </a>
+        <a class="navItem" data-route href="#notebooks">
+          <span class="ni">📒</span><span>Notebooks</span><span class="chip">Notes</span>
+        </a>
+        <a class="navItem" data-route href="#plan">
+          <span class="ni">🗓️</span><span>Long-term Plan</span><span class="chip">Study</span>
+        </a>
+        <a class="navItem" data-route href="#leaderboard">
+          <span class="ni">🏆</span><span>Leaderboard</span><span class="chip">Streak</span>
+        </a>
+        <a class="navItem" data-route href="#settings">
+          <span class="ni">⚙️</span><span>Settings</span><span class="chip">Theme</span>
+        </a>
+        <a class="navItem" data-route href="#profile">
+          <span class="ni">🧑‍🎨</span><span>Profile / Avatar</span><span class="chip">Me</span>
+        </a>
       </nav>
 
       <div class="sideFooter">
@@ -71,14 +112,20 @@
       </div>
     </aside>
 
-    <section class="view" id="view"></section>
+    <section class="view">
+      <div class="viewInner" id="view"></div>
+      <footer class="footer">
+        <div class="tiny muted">© Seraj — Offline First • LocalStorage • Hash Router</div>
+        <div class="tiny muted">Tips: جرّب وضع “التركيز” من الإعدادات</div>
+      </footer>
+    </section>
   </main>
 
   <!-- Toast -->
   <div class="toastHost" id="toastHost" aria-live="polite"></div>
 
-  <!-- Name modal (إجباري أول مرة) -->
-  <div class="modalOverlay hidden" id="nameModal">
+  <!-- Name modal -->
+  <div class="modalOverlay hidden" id="nameModal" role="dialog" aria-modal="true">
     <div class="modal">
       <div class="modalTitle">أهلاً! شو اسمك؟</div>
       <div class="modalSub">الاسم ينحفظ على نفس الجهاز (بدون تسجيل دخول).</div>
@@ -86,14 +133,15 @@
       <label class="label">الاسم</label>
       <input class="field" id="nameInput" placeholder="مثلاً: أحمد" maxlength="24" />
 
-      <div class="row end">
+      <div class="row end gap">
+        <button class="btn ghost" id="nameSkip">تخطي</button>
         <button class="btn primary" id="nameSave">حفظ</button>
       </div>
     </div>
   </div>
 
-  <!-- Daily lock modal (إذا حاول يدخل صفحات غير goals) -->
-  <div class="modalOverlay hidden" id="lockModal">
+  <!-- Daily lock modal -->
+  <div class="modalOverlay hidden" id="lockModal" role="dialog" aria-modal="true">
     <div class="modal">
       <div class="modalTitle">لازم تدخل أهداف اليوم أولاً 🔒</div>
       <div class="modalSub">بعدها بتنفتح كل الصفحات.</div>
@@ -102,6 +150,9 @@
       </div>
     </div>
   </div>
+
+  <!-- FX canvas -->
+  <canvas id="fxCanvas" aria-hidden="true"></canvas>
 
   <script type="module" src="script.js"></script>
 </body>
