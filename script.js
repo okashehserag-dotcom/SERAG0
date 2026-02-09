@@ -229,20 +229,9 @@ async function pullUserDoc(user){
 
   saveState();
 }
-
-let syncTimer = null;
-function syncUserThrottled(){
-  if(!authedUser || !FB) return;
-  if(syncTimer) return;
-  syncTimer = setTimeout(async ()=>{
-    syncTimer = null;
-    await pushUserDoc();
-  }, 1200);
-}
-
-async function pushUserDoc(){
-  if(!authedUser || !FB) return;
-  try{
+function syncUserThrottled(){ /* local only */ }
+async function pushUserDoc(){ /* local only */ }
+  
     const { fb, db } = FB;
     const ref = fb.doc(db, "users", authedUser.uid);
     await fb.updateDoc(ref, {
