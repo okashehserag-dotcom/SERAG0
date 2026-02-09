@@ -1596,26 +1596,30 @@ function renderPlan(view){
   renderPlanList();
 }
 
-/* ---------------------------
-  Leaderboard (Firestore real-time)
----------------------------- */
 function renderLeaderboard(view){
   const card = document.createElement("div");
   card.className = "card";
   card.innerHTML = `
-    <h3 class="h">🏆 المتصدرين (Top 10)</h3>
-    <p class="p">حسب مجموع دقائق التايمر (Firestore orderBy totalMinutes desc limit 10).</p>
-    <div id="lbBox" class="list"></div>
+    <h3 class="h">🏆 المتصدرين (محلي)</h3>
+    <p class="p">بدون تسجيل دخول/فايربيس: هذا يعرض بيانات جهازك فقط.</p>
+    <div class="list">
+      <div class="item">
+        <div class="row" style="justify-content:space-between">
+          <div class="row" style="gap:12px">
+            <span class="badge">#1</span>
+            <div class="avatarCircle" style="width:38px;height:38px">${state.avatar.svg || "🙂"}</div>
+            <div>
+              <div class="itemTitle">${escapeHtml(state.user.displayName || "طالب سراج")}</div>
+              <div class="itemSub">${state.totalMinutes} دقيقة</div>
+            </div>
+          </div>
+          <span class="badge">${state.coins} SC</span>
+        </div>
+      </div>
+    </div>
   `;
   view.appendChild(card);
-
-  const box = $("#lbBox");
-  box.innerHTML = `<div class="small">جاري التحميل...</div>`;
-
-  if(!FB || !authedUser){
-    box.innerHTML = `<div class="small">لازم تسجل دخول.</div>`;
-    return;
-  }
+}
 
   const { fb, db } = FB;
   const q = fb.query(
