@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0b1020" />
+  <title>Seraj — سراج</title>
+  <link rel="stylesheet" href="style.css" />
+
+  <!-- Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap" rel="stylesheet">
+
+  <!-- Three.js (CDN) -->
+  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+</head>
+<body>
+  <div id="app">
+    <!-- Login screen -->
+    <section id="authScreen" class="screen">
+      <div class="authCard">
+        <div class="brand">
+          <div class="logo">سراج</div>
+          <div class="tag">منصة تحفيز التوجيهي — بدون سيرفر</div>
+        </div>
+        <button id="btnGoogle" class="btn primary">تسجيل الدخول عبر Google</button>
+        <p class="muted">
+          بالتسجيل أنت توافق على حفظ بياناتك محليًا وعلى Firebase (Coins/Leaderboard/Avatar).
+        </p>
+      </div>
+    </section>
+
+    <!-- Main layout -->
+    <section id="mainScreen" class="screen hidden">
+      <aside class="sidebar">
+        <div class="sideTop">
+          <div class="miniBrand">
+            <span class="miniLogo">سراج</span>
+            <span class="miniCoin" id="coinBadge">0 SC</span>
+          </div>
+
+          <div class="userRow">
+            <div class="avatarCircle" id="miniAvatar"></div>
+            <div class="userMeta">
+              <div class="userName" id="userName">—</div>
+              <div class="userSub" id="userSub">جاهز للإنجاز؟</div>
+            </div>
+          </div>
+        </div>
+
+        <nav class="nav">
+          <a href="#timer" data-route class="navItem">⏱️ التايمر</a>
+          <a href="#goals" data-route class="navItem">✅ أهداف اليوم</a>
+          <a href="#progress" data-route class="navItem">🪙 التقدم والعملات</a>
+          <a href="#store" data-route class="navItem">🛒 المتجر</a>
+          <a href="#stats" data-route class="navItem">📊 الإحصائيات</a>
+          <a href="#notebooks" data-route class="navItem">📒 الدفاتر</a>
+          <a href="#plan" data-route class="navItem">🗓️ خطة طويلة</a>
+          <a href="#leaderboard" data-route class="navItem">🏆 المتصدرين</a>
+          <a href="#settings" data-route class="navItem">⚙️ الإعدادات</a>
+          <a href="#profile" data-route class="navItem">🧑‍🎨 البروفايل/أفاتار</a>
+        </nav>
+
+        <div class="sideBottom">
+          <button id="btnLogout" class="btn ghost">تسجيل الخروج</button>
+        </div>
+      </aside>
+
+      <main class="content">
+        <header class="topbar">
+          <div class="pageTitle" id="pageTitle">—</div>
+          <div class="topRight">
+            <div class="pill" id="dailyLockPill"></div>
+            <div class="pill">إجمالي: <span id="totalMinPill">0</span> دقيقة</div>
+          </div>
+        </header>
+
+        <section id="view" class="view"></section>
+      </main>
+    </section>
+  </div>
+
+  <script type="module" src="firebase.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
